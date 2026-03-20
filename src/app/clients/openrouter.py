@@ -5,6 +5,7 @@ from typing import TypeVar
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
+from app.config.prompt_loader import load_prompt
 from app.exceptions import OpenRouterApiError
 from app.models.common import ChatMessage
 from app.models.forecast import BusinessRecommendation, DailyForecastResult
@@ -35,14 +36,18 @@ class OpenRouterClient:
         *,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        response_format: dict | None = None,
     ) -> str:
         try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            kwargs: dict = {
+                "model": self._model,
+                "messages": [{"role": m.role, "content": m.content} for m in messages],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+            response = await self._client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content
             if content is None:
                 raise OpenRouterApiError("Empty response from LLM")
@@ -75,7 +80,9 @@ class OpenRouterClient:
         for attempt in range(1, max_retries + 1):
             raw = await self.complete(
                 all_messages, temperature=temperature, max_tokens=max_tokens,
+                response_format={"type": "json_object"},
             )
+            raw = self._strip_markdown_fences(raw)
             try:
                 return response_model.model_validate_json(raw)
             except ValidationError as exc:
@@ -96,6 +103,18 @@ class OpenRouterClient:
             f"Structured output failed after {max_retries} retries: {last_exc}"
         )
 
+    @staticmethod
+    def _strip_markdown_fences(text: str) -> str:
+        """Remove ```json ... ``` wrappers that LLMs often add."""
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            # Remove opening fence (```json or ```)
+            first_newline = stripped.index("\n")
+            stripped = stripped[first_newline + 1:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        return stripped.strip()
+
     async def generate_daily_forecast(
         self,
         sales_data: str,
@@ -103,51 +122,41 @@ class OpenRouterClient:
         calendar_info: str,
         menu_info: str,
     ) -> DailyForecastResult:
+        cfg = load_prompt("forecast")
         messages = [
-            ChatMessage(
-                role="system",
-                content=(
-                    "Ты — аналитик ресторана. На основе исторических продаж, погоды, "
-                    "календарных факторов и меню сформируй прогноз продаж на день. "
-                    "Отвечай строго в JSON."
-                ),
-            ),
+            ChatMessage(role="system", content=cfg.system_prompt),
             ChatMessage(
                 role="user",
-                content=(
-                    f"Исторические продажи:\n{sales_data}\n\n"
-                    f"Погода:\n{weather_data}\n\n"
-                    f"Календарь:\n{calendar_info}\n\n"
-                    f"Меню:\n{menu_info}\n\n"
-                    f"Сформируй прогноз."
+                content=cfg.user_template.format(
+                    sales_data=sales_data,
+                    weather_data=weather_data,
+                    calendar_info=calendar_info,
+                    menu_info=menu_info,
                 ),
             ),
         ]
-        return await self.complete_structured(messages, DailyForecastResult)
+        return await self.complete_structured(
+            messages, DailyForecastResult,
+            temperature=cfg.temperature, max_tokens=cfg.max_tokens,
+        )
 
     async def generate_recommendations(
         self,
         trends: str,
         plan_fact: str,
     ) -> list[BusinessRecommendation]:
+        cfg = load_prompt("recommendations")
         messages = [
-            ChatMessage(
-                role="system",
-                content=(
-                    "Ты — бизнес-консультант ресторана. На основе трендов и план-факт "
-                    "анализа сформируй список рекомендаций. Отвечай JSON-массивом."
-                ),
-            ),
+            ChatMessage(role="system", content=cfg.system_prompt),
             ChatMessage(
                 role="user",
-                content=(
-                    f"Тренды:\n{trends}\n\n"
-                    f"План-факт:\n{plan_fact}\n\n"
-                    f"Сформируй рекомендации."
-                ),
+                content=cfg.user_template.format(trends=trends, plan_fact=plan_fact),
             ),
         ]
-        raw = await self.complete(messages, temperature=0.5)
-        import json as _json
-        items = _json.loads(raw)
+        raw = await self.complete(
+            messages, temperature=cfg.temperature, max_tokens=cfg.max_tokens,
+            response_format={"type": "json_object"},
+        )
+        raw = self._strip_markdown_fences(raw)
+        items = json.loads(raw)
         return [BusinessRecommendation.model_validate(item) for item in items]

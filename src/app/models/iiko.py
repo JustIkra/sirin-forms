@@ -1,5 +1,6 @@
 import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -7,8 +8,10 @@ from pydantic import BaseModel
 class ProductType(StrEnum):
     DISH = "dish"
     MODIFIER = "modifier"
-    GOOD = "good"
+    GOODS = "goods"
     OUTER = "outer"
+    PREPARED = "prepared"
+    SERVICE = "service"
 
 
 class OlapReportType(StrEnum):
@@ -75,7 +78,7 @@ class OlapV2Request(BaseModel):
     group_by_row_fields: list[str] = []
     group_by_col_fields: list[str] = []
     aggregate_fields: list[str] = []
-    filters: dict[str, list[str]] = {}
+    filters: dict[str, Any] = {}
 
 
 class IikoOlapReport(BaseModel):

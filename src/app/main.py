@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.forecast import router as forecast_router
 from app.api.health import router as health_router
 from app.clients.iiko import IikoClient
 from app.clients.openrouter import OpenRouterClient
@@ -23,6 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     app.state.session_factory = create_session_factory(engine)
+    app.state.settings = settings
 
     # Clients
     iiko = IikoClient(
@@ -66,4 +69,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health_router)
+app.include_router(forecast_router)

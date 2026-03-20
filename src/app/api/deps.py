@@ -9,7 +9,12 @@ from app.clients.weather import WeatherClient
 from app.repositories.forecasts import ForecastsRepository
 from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
+from app.config import Settings
 from app.repositories.weather import WeatherRepository
+
+
+async def get_settings(request: Request) -> Settings:
+    return request.app.state.settings
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

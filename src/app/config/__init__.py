@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # OpenRouter (LLM)
     openrouter_api_key: SecretStr
-    openrouter_model: str = "anthropic/claude-sonnet-4"
+    openrouter_model: str = "google/gemini-3-flash-preview"
 
     # OpenWeatherMap
     owm_api_key: SecretStr

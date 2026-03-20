@@ -1,0 +1,8 @@
+src/frontend/node_modules
+src/frontend/dist
+src/tests
+.venv
+.git
+__pycache__
+*.pyc
+.env

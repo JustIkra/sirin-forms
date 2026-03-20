@@ -31,3 +31,16 @@ docker-compose.override.yml
 # Database
 *.db
 *.sqlite3
+
+
+CLAUDE.md
+*.svg
+uv.lock
+.claude
+.pytest_cache
+
+# Frontend
+src/frontend/node_modules/
+src/frontend/dist/
+
+.memory-base

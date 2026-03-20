@@ -77,7 +77,7 @@ class ForecastRecord(Base):
     predicted_quantity: Mapped[float] = mapped_column(Float)
     confidence: Mapped[float] = mapped_column(Float)
     key_factors: Mapped[str | None] = mapped_column(Text, nullable=True)
-    weather: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    weather: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_holiday: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(

@@ -1,7 +1,11 @@
 import asyncio
+import datetime
+import hashlib
 import logging
+import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from typing import Any
 
 from app.clients.base import BaseHttpClient
 from app.exceptions import IikoApiError, IikoAuthError
@@ -11,6 +15,7 @@ from app.models.iiko import (
     IikoProduct,
     IikoStore,
     IikoSupplier,
+    OlapReportType,
     OlapV2Request,
     SaleRecord,
 )
@@ -32,15 +37,19 @@ class IikoClient(BaseHttpClient):
         password: str,
         **kwargs: object,
     ) -> None:
-        super().__init__(base_url=f"{server_url.rstrip('/')}/resto/api", **kwargs)
+        super().__init__(
+            base_url=f"{server_url.rstrip('/')}/resto/api",
+            headers={"Accept": "application/json, */*;q=0.9"},
+            **kwargs,
+        )
         self._login = login
-        self._password = password
+        self._password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
         self._semaphore = asyncio.Semaphore(1)
 
     async def _authenticate(self) -> str:
         response = await self._request(
             "GET", "/auth",
-            params={"login": self._login, "pass": self._password},
+            params={"login": self._login, "pass": self._password_hash},
         )
         if response.status_code != 200:
             raise IikoAuthError(
@@ -77,6 +86,60 @@ class IikoClient(BaseHttpClient):
                 status_code=resp.status_code,
             )
 
+    def _parse_json(self, response: object, context: str) -> Any:
+        """Parse JSON from response, raising IikoApiError with diagnostic info on failure."""
+        from httpx import Response
+        resp: Response = response  # type: ignore[assignment]
+        self._check_response(resp, context)
+        body = resp.text
+        if not body or not body.strip():
+            raise IikoApiError(
+                f"{context}: empty response body (Content-Type: {resp.headers.get('content-type', 'unknown')})",
+                status_code=resp.status_code,
+            )
+        try:
+            return resp.json()
+        except Exception as exc:
+            preview = body[:500]
+            logger.error("%s: failed to parse JSON. Body preview: %s", context, preview)
+            raise IikoApiError(
+                f"{context}: invalid JSON response (Content-Type: {resp.headers.get('content-type', 'unknown')})",
+                status_code=resp.status_code,
+            ) from exc
+
+    def _parse_xml_list(self, response: object, context: str) -> list[dict[str, str]]:
+        """Parse XML list response from iiko Server API.
+
+        iiko Server GET endpoints return empty {} in JSON due to broken
+        serialization. XML works correctly.
+        """
+        from httpx import Response
+        resp: Response = response  # type: ignore[assignment]
+        self._check_response(resp, context)
+        body = resp.text
+        if not body or not body.strip():
+            raise IikoApiError(
+                f"{context}: empty response body",
+                status_code=resp.status_code,
+            )
+        try:
+            root = ET.fromstring(body)
+        except ET.ParseError as exc:
+            preview = body[:500]
+            logger.error("%s: failed to parse XML. Body preview: %s", context, preview)
+            raise IikoApiError(
+                f"{context}: invalid XML response",
+                status_code=resp.status_code,
+            ) from exc
+        items: list[dict[str, str]] = []
+        for element in root:
+            item: dict[str, str] = {}
+            for child in element:
+                if child.text:
+                    item[child.tag] = child.text
+            items.append(item)
+        return items
+
     # --- Products ---
 
     async def get_products(self, *, include_deleted: bool = False) -> list[IikoProduct]:
@@ -84,9 +147,21 @@ class IikoClient(BaseHttpClient):
             params: dict = {"key": token}
             if include_deleted:
                 params["includeDeleted"] = "true"
-            response = await self._request("GET", "/products", params=params)
-            self._check_response(response, "get_products")
-            return [IikoProduct.model_validate(p) for p in response.json()]
+            response = await self._request(
+                "GET", "/products", params=params,
+                headers={"Accept": "application/xml"},
+            )
+            items = self._parse_xml_list(response, "get_products")
+            return [
+                IikoProduct(
+                    id=item["id"],
+                    name=item.get("name", ""),
+                    code=item.get("code"),
+                    product_type=item.get("productType", "DISH").lower(),
+                )
+                for item in items
+                if "id" in item
+            ]
 
     async def search_products(
         self,
@@ -103,9 +178,21 @@ class IikoClient(BaseHttpClient):
                 params["code"] = code
             if product_type:
                 params["productType"] = product_type
-            response = await self._request("GET", "/products/search", params=params)
-            self._check_response(response, "search_products")
-            return [IikoProduct.model_validate(p) for p in response.json()]
+            response = await self._request(
+                "GET", "/products/search", params=params,
+                headers={"Accept": "application/xml"},
+            )
+            items = self._parse_xml_list(response, "search_products")
+            return [
+                IikoProduct(
+                    id=item["id"],
+                    name=item.get("name", ""),
+                    code=item.get("code"),
+                    product_type=item.get("productType", "DISH").lower(),
+                )
+                for item in items
+                if "id" in item
+            ]
 
     # --- Corporation ---
 
@@ -113,25 +200,52 @@ class IikoClient(BaseHttpClient):
         async with self._session() as token:
             response = await self._request(
                 "GET", "/corporation/stores", params={"key": token},
+                headers={"Accept": "application/xml"},
             )
-            self._check_response(response, "get_stores")
-            return [IikoStore.model_validate(s) for s in response.json()]
+            items = self._parse_xml_list(response, "get_stores")
+            return [
+                IikoStore(
+                    id=item["id"],
+                    name=item.get("name", ""),
+                    type=item.get("type"),
+                )
+                for item in items
+                if "id" in item
+            ]
 
     async def get_departments(self) -> list[IikoDepartment]:
         async with self._session() as token:
             response = await self._request(
                 "GET", "/corporation/departments", params={"key": token},
+                headers={"Accept": "application/xml"},
             )
-            self._check_response(response, "get_departments")
-            return [IikoDepartment.model_validate(d) for d in response.json()]
+            items = self._parse_xml_list(response, "get_departments")
+            return [
+                IikoDepartment(
+                    id=item["id"],
+                    name=item.get("name", ""),
+                    parent_id=item.get("parentId"),
+                )
+                for item in items
+                if "id" in item
+            ]
 
     async def get_suppliers(self) -> list[IikoSupplier]:
         async with self._session() as token:
             response = await self._request(
                 "GET", "/suppliers", params={"key": token},
+                headers={"Accept": "application/xml"},
             )
-            self._check_response(response, "get_suppliers")
-            return [IikoSupplier.model_validate(s) for s in response.json()]
+            items = self._parse_xml_list(response, "get_suppliers")
+            return [
+                IikoSupplier(
+                    id=item["id"],
+                    name=item.get("name", ""),
+                    code=item.get("code"),
+                )
+                for item in items
+                if "id" in item
+            ]
 
     # --- Reports ---
 
@@ -151,8 +265,7 @@ class IikoClient(BaseHttpClient):
                     "dateTo": date_to,
                 },
             )
-            self._check_response(response, "get_sales_report")
-            return [SaleRecord.model_validate(r) for r in response.json()]
+            return [SaleRecord.model_validate(r) for r in self._parse_json(response, "get_sales_report")]
 
     async def get_olap_report(
         self,
@@ -178,15 +291,30 @@ class IikoClient(BaseHttpClient):
             if aggregate:
                 params["agr"] = aggregate
             response = await self._request("GET", "/reports/olap", params=params)
-            self._check_response(response, "get_olap_report")
-            return IikoOlapReport.model_validate(response.json())
+            raw = self._parse_json(response, "get_olap_report")
+            data = self._extract_olap_data(raw)
+            return IikoOlapReport(
+                report_type=OlapReportType(report_type),
+                date_from=datetime.date.fromisoformat(date_from),
+                date_to=datetime.date.fromisoformat(date_to),
+                data=data,
+            )
+
+    @staticmethod
+    def _extract_olap_data(raw: Any) -> list[dict]:
+        """Extract data array from various iiko OLAP response formats."""
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, dict):
+            if "data" in raw:
+                return raw["data"]
+            return [raw]
+        return []
 
     async def get_olap_report_v2(self, request: OlapV2Request) -> IikoOlapReport:
         async with self._session() as token:
             body = {
                 "reportType": request.report_type,
-                "dateFrom": request.date_from.isoformat(),
-                "dateTo": request.date_to.isoformat(),
                 "groupByRowFields": request.group_by_row_fields,
                 "groupByColFields": request.group_by_col_fields,
                 "aggregateFields": request.aggregate_fields,
@@ -194,11 +322,21 @@ class IikoClient(BaseHttpClient):
             }
             response = await self._request(
                 "POST", "/v2/reports/olap",
-                params={"key": token},
+                params={
+                    "key": token,
+                    "dateFrom": request.date_from.isoformat(),
+                    "dateTo": request.date_to.isoformat(),
+                },
                 json_body=body,
             )
-            self._check_response(response, "get_olap_report_v2")
-            return IikoOlapReport.model_validate(response.json())
+            raw = self._parse_json(response, "get_olap_report_v2")
+            data = self._extract_olap_data(raw)
+            return IikoOlapReport(
+                report_type=request.report_type,
+                date_from=request.date_from,
+                date_to=request.date_to,
+                data=data,
+            )
 
     async def get_product_expense(
         self,
@@ -216,8 +354,7 @@ class IikoClient(BaseHttpClient):
                     "dateTo": date_to,
                 },
             )
-            self._check_response(response, "get_product_expense")
-            return response.json()
+            return self._parse_json(response, "get_product_expense")
 
     async def get_ingredient_entry(
         self,
@@ -233,5 +370,4 @@ class IikoClient(BaseHttpClient):
                     "article": article,
                 },
             )
-            self._check_response(response, "get_ingredient_entry")
-            return response.json()
+            return self._parse_json(response, "get_ingredient_entry")

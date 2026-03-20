@@ -1,22 +1,19 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
 WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
-FROM base AS builder
-
 COPY pyproject.toml .
+COPY src/app src/app
+
 RUN pip install --no-cache-dir .
 
-FROM base AS runtime
-
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
-
-COPY src/ src/
+COPY src/app src/app
 
 USER app
+
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 
