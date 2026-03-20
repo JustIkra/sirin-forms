@@ -35,6 +35,7 @@ docker-compose.override.yml
 
 CLAUDE.md
 *.svg
+!src/frontend/public/favicon.svg
 uv.lock
 .claude
 .pytest_cache
