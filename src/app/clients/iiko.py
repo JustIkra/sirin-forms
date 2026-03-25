@@ -341,20 +341,41 @@ class IikoClient(BaseHttpClient):
     async def get_product_expense(
         self,
         department: str,
-        date_from: str,
-        date_to: str,
+        date_from: datetime.date,
+        date_to: datetime.date,
     ) -> list[dict]:
+        """Get ingredient consumption report. Returns list of {date, productName, productId, value}."""
         async with self._session() as token:
             response = await self._request(
                 "GET", "/reports/productExpense",
                 params={
                     "key": token,
                     "department": department,
-                    "dateFrom": date_from,
-                    "dateTo": date_to,
+                    "dateFrom": date_from.strftime("%d.%m.%Y"),
+                    "dateTo": date_to.strftime("%d.%m.%Y"),
                 },
+                headers={"Accept": "application/xml"},
             )
-            return self._parse_json(response, "get_product_expense")
+            return self._parse_xml_list(response, "get_product_expense")
+
+    async def get_store_operations(
+        self,
+        date_from: datetime.date,
+        date_to: datetime.date,
+    ) -> list[dict]:
+        """Get warehouse operations (invoices, write-offs, transfers)."""
+        async with self._session() as token:
+            response = await self._request(
+                "GET", "/reports/storeOperations",
+                params={
+                    "key": token,
+                    "dateFrom": date_from.strftime("%d.%m.%Y"),
+                    "dateTo": date_to.strftime("%d.%m.%Y"),
+                    "productDetalization": "true",
+                },
+                headers={"Accept": "application/xml"},
+            )
+            return self._parse_xml_list(response, "get_store_operations")
 
     async def get_ingredient_entry(
         self,

@@ -1,19 +1,20 @@
 import type { ReactNode } from 'react';
+import type { PageId } from '../types/forecast';
 
-const NAV_ITEMS = [
-  { id: 'wf01', label: 'Дашборд', disabled: true },
-  { id: 'wf02', label: 'Продажи', disabled: true },
-  { id: 'wf03', label: 'Прогноз', disabled: false },
-  { id: 'wf04', label: 'Закупки', disabled: true },
-  { id: 'wf05', label: 'План-факт', disabled: true },
-  { id: 'wf06', label: 'Настройки', disabled: true },
+const NAV_ITEMS: { id: PageId; label: string }[] = [
+  { id: 'dashboard', label: 'Дашборд' },
+  { id: 'forecast', label: 'Прогноз' },
+  { id: 'trends', label: 'Тренды' },
+  { id: 'procurement', label: 'Закупки' },
 ];
 
 interface Props {
   children: ReactNode;
+  activePage: PageId;
+  onNavigate: (page: PageId) => void;
 }
 
-export default function Layout({ children }: Props) {
+export default function Layout({ children, activePage, onNavigate }: Props) {
   return (
     <div className="flex h-screen">
       <aside className="flex w-56 flex-col border-r border-slate-200 bg-white">
@@ -25,19 +26,14 @@ export default function Layout({ children }: Props) {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              disabled={item.disabled}
+              onClick={() => onNavigate(item.id)}
               className={`flex w-full items-center gap-2 px-5 py-2.5 text-left text-sm transition-colors ${
-                item.disabled
-                  ? 'cursor-not-allowed text-slate-400'
-                  : 'bg-blue-50 font-medium text-blue-700'
+                item.id === activePage
+                  ? 'bg-blue-50 font-medium text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
               {item.label}
-              {item.disabled && (
-                <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  скоро
-                </span>
-              )}
             </button>
           ))}
         </nav>

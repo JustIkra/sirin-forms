@@ -1,6 +1,8 @@
 import asyncio
 import datetime
 import logging
+import re
+from collections import defaultdict
 
 from app.clients.openrouter import OpenRouterClient
 from app.config import Settings
@@ -51,25 +53,48 @@ class ForecastService:
         except Exception as exc:
             raise ForecastError(f"Failed to load products: {exc}") from exc
 
-        # 3. Gather sales and weather in parallel
-        historical_task = asyncio.create_task(
-            self._collector.collect_historical_sales(target_date),
-        )
-        recent_task = asyncio.create_task(
-            self._collector.collect_recent_sales(target_date),
-        )
-        weather_task = asyncio.create_task(
-            self._collector.collect_weather(target_date),
-        )
+        # 3. Collect sales and weather sequentially (asyncpg doesn't support
+        #    concurrent operations on a single session)
+        historical = await self._collector.collect_historical_sales(target_date)
+        recent = await self._collector.collect_recent_sales(target_date)
+        weather = await self._collector.collect_weather(target_date)
 
-        historical, recent, weather = await asyncio.gather(
-            historical_task, recent_task, weather_task,
-        )
-
-        # 4. Filter dishes to only those with sales
+        # 4. Filter dishes to only those with sales (by ID or name,
+        #    because iiko may use different IDs for the same dish across departments)
         sold_ids = {s.dish_id for s in historical} | {s.dish_id for s in recent}
-        active_dishes = [d for d in dishes if d.id in sold_ids]
-        logger.info("Menu filtered: %d → %d dishes with sales", len(dishes), len(active_dishes))
+        sold_names = {s.dish_name.strip().lower() for s in historical} | {
+            s.dish_name.strip().lower() for s in recent
+        }
+        active_dishes = [
+            d for d in dishes
+            if d.id in sold_ids or d.name.strip().lower() in sold_names
+        ]
+
+        # Exclude ingredients, modifiers, and internal items from forecast
+        active_dishes = [d for d in active_dishes if not self._is_non_dish(d.name)]
+
+        # Deduplicate by name: iiko has separate entries per department
+        # for the same dish. Keep one entry per unique name (prefer ID-matched).
+        seen_names: dict[str, IikoProduct] = {}
+        for d in active_dishes:
+            key = d.name.strip().lower()
+            if key not in seen_names or d.id in sold_ids:
+                seen_names[key] = d
+        active_dishes = list(seen_names.values())
+
+        # Limit to top-N most popular dishes so the LLM can predict all of them
+        dish_volume: dict[str, float] = defaultdict(float)
+        for s in recent:
+            dish_volume[s.dish_name.strip().lower()] += s.quantity
+        active_dishes.sort(
+            key=lambda d: dish_volume.get(d.name.strip().lower(), 0), reverse=True,
+        )
+        max_dishes = 50
+        active_dishes = active_dishes[:max_dishes]
+        logger.info(
+            "Menu filtered: %d → %d dishes (top %d by recent sales)",
+            len(dishes), len(active_dishes), max_dishes,
+        )
 
         # 5. Build prompt parts
         sales_data = self._prompt.build_sales_data(historical, recent, target_date)
@@ -97,6 +122,23 @@ class ForecastService:
         await self._forecasts_repo.save_forecast(result)
         logger.info("Forecast saved for %s: %d dishes", target_date, len(result.forecasts))
         return result
+
+    # Pattern to detect ingredients/addons: name ending with "NN гр", "NN мл", etc.
+    _INGREDIENT_RE = re.compile(r"\d+\s*(?:гр\.?|мл\.?|мг)\s*$", re.IGNORECASE)
+    _NON_DISH_PREFIXES = ("+", "-", "Заказ ")
+    _NON_DISH_KEYWORDS = ("комплимент", "замена чаши", "на чаше", "подарок")
+
+    @staticmethod
+    def _is_non_dish(name: str) -> bool:
+        """Return True for ingredients, modifiers, and internal items."""
+        stripped = name.strip()
+        if any(stripped.startswith(p) for p in ForecastService._NON_DISH_PREFIXES):
+            return True
+        if any(kw in stripped.lower() for kw in ForecastService._NON_DISH_KEYWORDS):
+            return True
+        if ForecastService._INGREDIENT_RE.search(stripped):
+            return True
+        return False
 
     _WEATHER_RU: dict[str, str] = {
         "Clear": "ясно",
@@ -142,10 +184,11 @@ class ForecastService:
         target_date: datetime.date,
     ) -> DailyForecastResult:
         active_ids = {d.id for d in active_dishes}
+        active_names = {d.name.strip().lower() for d in active_dishes}
 
         filtered = []
         for dish in result.forecasts:
-            if dish.dish_id not in active_ids:
+            if dish.dish_id not in active_ids and dish.dish_name.strip().lower() not in active_names:
                 logger.debug("Filtering unknown dish from forecast: %s", dish.dish_name)
                 continue
             dish.predicted_quantity = max(0.0, dish.predicted_quantity)
@@ -161,4 +204,5 @@ class ForecastService:
             weather=weather_str,
             is_holiday=cal["is_holiday"],
             notes=result.notes,
+            method="llm",
         )

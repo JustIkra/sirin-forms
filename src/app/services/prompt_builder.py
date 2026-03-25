@@ -37,7 +37,46 @@ class PromptBuilder:
 
         lines.append("")
 
-        # 2. Trend: average daily sales per week for last 4 weeks
+        # 2. Daily breakdown for top-20 dishes (last 7 days)
+        if recent:
+            week_ago = target_date - datetime.timedelta(days=7)
+            last_7d = [s for s in recent if s.date > week_ago]
+            if last_7d:
+                # Find top-20 dishes by volume in last 7 days
+                dish_vol: dict[str, float] = defaultdict(float)
+                for s in last_7d:
+                    dish_vol[s.dish_name] += s.quantity
+                top_dishes = sorted(dish_vol, key=dish_vol.get, reverse=True)[:20]
+
+                # Collect unique dates
+                dates_7d = sorted({s.date for s in last_7d})
+
+                # Build per-dish per-date grid
+                grid: dict[str, dict[datetime.date, float]] = defaultdict(lambda: defaultdict(float))
+                for s in last_7d:
+                    if s.dish_name in top_dishes:
+                        grid[s.dish_name][s.date] += s.quantity
+
+                lines.append("")
+                lines.append("## Продажи по дням (последние 7 дней)")
+                # Header
+                header = f"{'Дата':<12}"
+                for dish in top_dishes:
+                    short = dish[:12]
+                    header += f" | {short:>12}"
+                lines.append(header)
+                lines.append("-" * len(header))
+                # Rows
+                for d in dates_7d:
+                    row = f"{d.isoformat():<12}"
+                    for dish in top_dishes:
+                        qty = grid[dish].get(d, 0)
+                        row += f" | {qty:>12.0f}"
+                    lines.append(row)
+
+            lines.append("")
+
+        # 3. Trend: average daily sales per week for last 4 weeks
         if recent:
             lines.append("## Тренд продаж (последние 4 недели, среднее в день)")
             week_totals: dict[int, list[float]] = defaultdict(list)

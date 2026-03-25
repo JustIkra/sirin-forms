@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import String, Float, Integer, Date, DateTime, Text, ForeignKey
+from sqlalchemy import String, Float, Integer, Date, DateTime, Text, ForeignKey, LargeBinary, JSON
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -80,10 +80,27 @@ class ForecastRecord(Base):
     weather: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_holiday: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(10), default="llm")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(tz=MSK),
     )
+
+
+class MLModelRecord(Base):
+    __tablename__ = "ml_models"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dish_id: Mapped[str] = mapped_column(String(50), index=True)
+    dish_name: Mapped[str] = mapped_column(String(200))
+    model_blob: Mapped[bytes] = mapped_column(LargeBinary)
+    metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    feature_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    trained_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(tz=MSK),
+    )
+    samples_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 def create_engine(database_url: str):

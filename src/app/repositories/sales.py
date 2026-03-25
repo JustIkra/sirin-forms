@@ -58,6 +58,21 @@ class SalesRepository(BaseRepository[SaleRecordDb]):
         result = await self._session.execute(stmt)
         return [self._to_model(r) for r in result.scalars().all()]
 
+    async def get_sales_by_dish_name(
+        self, dish_name: str, date_from: datetime.date, date_to: datetime.date,
+    ) -> list[SaleRecord]:
+        stmt = (
+            select(SaleRecordDb)
+            .where(
+                func.lower(SaleRecordDb.dish_name) == dish_name.strip().lower(),
+                SaleRecordDb.date >= date_from,
+                SaleRecordDb.date <= date_to,
+            )
+            .order_by(SaleRecordDb.date)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_model(r) for r in result.scalars().all()]
+
     async def get_daily_totals(
         self, date_from: datetime.date, date_to: datetime.date,
     ) -> list[DailySalesTotal]:

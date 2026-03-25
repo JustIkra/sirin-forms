@@ -7,6 +7,7 @@ from app.clients.iiko import IikoClient
 from app.clients.openrouter import OpenRouterClient
 from app.clients.weather import WeatherClient
 from app.repositories.forecasts import ForecastsRepository
+from app.repositories.ml_models import MLModelsRepository
 from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
 from app.config import Settings
@@ -58,3 +59,9 @@ async def get_forecasts_repo(
     session: AsyncSession = Depends(get_db_session),
 ) -> ForecastsRepository:
     return ForecastsRepository(session)
+
+
+async def get_ml_models_repo(
+    session: AsyncSession = Depends(get_db_session),
+) -> MLModelsRepository:
+    return MLModelsRepository(session)
