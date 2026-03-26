@@ -45,8 +45,8 @@ export default function App() {
       {page === 'forecast' && (
         <>
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Прогнозный прогон</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-xl font-bold text-gradient">Прогнозный прогон</h2>
+            <p className="text-sm text-slate-400">
               Сборка forecast packet: формирование прогноза спроса
             </p>
           </div>

@@ -40,8 +40,8 @@ export default function DashboardPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-900">Дашборд точности</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-xl font-bold text-gradient">Дашборд точности</h2>
+        <p className="text-sm text-slate-400">
           Сравнение ML и ИИ-прогнозов за последние 30 дней
         </p>
       </div>

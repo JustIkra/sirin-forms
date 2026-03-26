@@ -20,7 +20,7 @@ export default function ExportButtons({ date, method, type }: Props) {
           key={format}
           href={getExportUrl(date, method, type, format)}
           download
-          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+          className="rounded border border-white/10 px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
         >
           {label}
         </a>

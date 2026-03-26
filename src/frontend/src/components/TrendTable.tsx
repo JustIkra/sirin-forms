@@ -12,17 +12,17 @@ function trendBadge(direction: DishTrend['trend_direction']): {
     case 'growing':
       return {
         label: 'рост',
-        className: 'text-green-700 bg-green-50',
+        className: 'text-green-400 bg-green-500/10',
       };
     case 'declining':
       return {
         label: 'падение',
-        className: 'text-red-700 bg-red-50',
+        className: 'text-red-400 bg-red-500/10',
       };
     case 'stable':
       return {
         label: 'стабильно',
-        className: 'text-slate-600 bg-slate-100',
+        className: 'text-slate-400 bg-white/[0.06]',
       };
   }
 }
@@ -74,52 +74,52 @@ export default function TrendTable({ trends }: Props) {
   );
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
+    <div className="overflow-hidden glass-card">
+      <table className="min-w-full divide-y divide-white/[0.06]">
+        <thead className="bg-white/[0.03]">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-slate-400 uppercase">
               Блюдо
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-400 uppercase">
               Сред./нед (текущие)
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-400 uppercase">
               Сред./нед (прежние)
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-slate-400 uppercase">
               Изменение %
             </th>
-            <th className="px-4 py-3 text-center text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-center text-xs font-medium tracking-wider text-slate-400 uppercase">
               Тренд
             </th>
-            <th className="px-4 py-3 text-center text-xs font-medium tracking-wider text-slate-500 uppercase">
+            <th className="px-4 py-3 text-center text-xs font-medium tracking-wider text-slate-400 uppercase">
               Сезонность
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-white/[0.04]">
           {sorted.map((t) => {
             const badge = trendBadge(t.trend_direction);
             return (
-              <tr key={t.dish_name} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-medium text-slate-900">
+              <tr key={t.dish_name} className="hover:bg-white/[0.04]">
+                <td className="px-4 py-3 text-sm font-medium text-white">
                   {t.dish_name}
                 </td>
-                <td className="px-4 py-3 text-right text-sm tabular-nums text-slate-900">
+                <td className="px-4 py-3 text-right text-sm tabular-nums text-white">
                   {t.current_weekly_avg.toFixed(1)}
                 </td>
-                <td className="px-4 py-3 text-right text-sm tabular-nums text-slate-900">
+                <td className="px-4 py-3 text-right text-sm tabular-nums text-white">
                   {t.prev_weekly_avg.toFixed(1)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <span
                     className={`text-sm tabular-nums font-medium ${
                       t.change_pct > 0
-                        ? 'text-green-600'
+                        ? 'text-green-400'
                         : t.change_pct < 0
-                          ? 'text-red-600'
-                          : 'text-slate-600'
+                          ? 'text-red-400'
+                          : 'text-slate-400'
                     }`}
                   >
                     {t.change_pct > 0 ? '+' : ''}

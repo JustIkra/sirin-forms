@@ -24,29 +24,29 @@ export default function ForecastForm({ onSubmit, loading, method, onMethodChange
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+        <label className="mb-1 block text-sm font-medium text-slate-300">
           Дата прогноза
         </label>
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+        <label className="mb-1 block text-sm font-medium text-slate-300">
           Метод
         </label>
-        <div className="inline-flex rounded-md border border-slate-300 shadow-sm">
+        <div className="inline-flex rounded-md border border-white/10">
           <button
             type="button"
             onClick={() => onMethodChange('llm')}
             className={`px-4 py-2 text-sm font-medium rounded-l-md transition-colors ${
               method === 'llm'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-slate-700 hover:bg-slate-50'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
             }`}
           >
             ИИ-прогноз
@@ -54,10 +54,10 @@ export default function ForecastForm({ onSubmit, loading, method, onMethodChange
           <button
             type="button"
             onClick={() => onMethodChange('ml')}
-            className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-slate-300 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-white/10 transition-colors ${
               method === 'ml'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-slate-700 hover:bg-slate-50'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
             }`}
           >
             ML-прогноз
@@ -65,19 +65,19 @@ export default function ForecastForm({ onSubmit, loading, method, onMethodChange
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-slate-700">
+      <label className="flex items-center gap-2 text-sm text-slate-300">
         <input
           type="checkbox"
           checked={force}
           onChange={(e) => setForce(e.target.checked)}
-          className="rounded border-slate-300"
+          className="rounded border-white/10 bg-white/5 text-white"
         />
         Пересчитать (force)
       </label>
       <button
         type="submit"
         disabled={loading}
-        className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? 'Расчёт...' : 'Запустить прогноз'}
       </button>

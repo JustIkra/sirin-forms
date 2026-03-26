@@ -45,9 +45,9 @@ export default function PlanFactSection({ forecastDate, method }: Props) {
   if (loading) {
     return (
       <div className="mt-8">
-        <h2 className="mb-4 text-xl font-bold text-slate-900">План-факт</h2>
+        <h2 className="mb-4 text-xl font-bold text-white">План-факт</h2>
         <div className="flex items-center justify-center py-12">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-blue-400" />
         </div>
       </div>
     );
@@ -56,8 +56,8 @@ export default function PlanFactSection({ forecastDate, method }: Props) {
   if (error) {
     return (
       <div className="mt-8">
-        <h2 className="mb-4 text-xl font-bold text-slate-900">План-факт</h2>
-        <p className="text-sm text-red-600">{error}</p>
+        <h2 className="mb-4 text-xl font-bold text-white">План-факт</h2>
+        <p className="text-sm text-red-400">{error}</p>
       </div>
     );
   }
@@ -66,7 +66,7 @@ export default function PlanFactSection({ forecastDate, method }: Props) {
 
   return (
     <div className="mt-8 space-y-6">
-      <h2 className="text-xl font-bold text-slate-900">План-факт</h2>
+      <h2 className="text-xl font-bold text-white">План-факт</h2>
       <PlanFactSummaryCard summary={data.summary} />
       <div className="grid gap-6 xl:grid-cols-2">
         <PlanFactTable records={data.records} />

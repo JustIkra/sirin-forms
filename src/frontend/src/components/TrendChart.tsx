@@ -54,42 +54,42 @@ export default function TrendChart({ growing, declining }: Props) {
   const height = Math.max(300, data.length * 32);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-medium text-slate-700">
+    <div className="glass-card p-4">
+      <h3 className="mb-3 text-sm font-medium text-slate-300">
         Изменение спроса, %
       </h3>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} layout="vertical" margin={{ left: 120, right: 20 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" tickFormatter={(v: number) => `${v}%`} />
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#ffffff10" />
+          <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v}%`} />
           <YAxis
             type="category"
             dataKey="name"
             width={110}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#94a3b8' }}
           />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const d = payload[0].payload as ChartDatum;
               return (
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
-                  <p className="mb-1 font-medium text-slate-900">{d.fullName}</p>
-                  <p className="text-slate-600">
+                <div className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-xs shadow-xl">
+                  <p className="mb-1 font-medium text-white">{d.fullName}</p>
+                  <p className="text-slate-400">
                     Изменение:{' '}
                     <span
                       className={
-                        d.change_pct >= 0 ? 'text-green-600' : 'text-red-600'
+                        d.change_pct >= 0 ? 'text-green-400' : 'text-red-400'
                       }
                     >
                       {d.change_pct > 0 ? '+' : ''}
                       {d.change_pct.toFixed(1)}%
                     </span>
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-slate-400">
                     Сред./нед текущие: {d.current_weekly_avg.toFixed(1)}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-slate-400">
                     Сред./нед прежние: {d.prev_weekly_avg.toFixed(1)}
                   </p>
                 </div>

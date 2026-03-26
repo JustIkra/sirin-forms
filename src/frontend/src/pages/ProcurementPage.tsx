@@ -39,37 +39,37 @@ export default function ProcurementPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-900">Лист закупок</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-xl font-bold text-gradient">Лист закупок</h2>
+        <p className="text-sm text-slate-400">
           Расчёт потребности в ингредиентах на основе прогноза спроса
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
+          <label className="mb-1 block text-sm font-medium text-slate-300">
             Дата
           </label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
+          <label className="mb-1 block text-sm font-medium text-slate-300">
             Метод
           </label>
-          <div className="inline-flex rounded-md border border-slate-300 shadow-sm">
+          <div className="inline-flex rounded-md border border-white/10">
             <button
               type="button"
               onClick={() => setMethod('llm')}
               className={`px-4 py-2 text-sm font-medium rounded-l-md transition-colors ${
                 method === 'llm'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-slate-700 hover:bg-slate-50'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
               }`}
             >
               ИИ-прогноз
@@ -77,10 +77,10 @@ export default function ProcurementPage() {
             <button
               type="button"
               onClick={() => setMethod('ml')}
-              className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-slate-300 transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-white/10 transition-colors ${
                 method === 'ml'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-slate-700 hover:bg-slate-50'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
               }`}
             >
               ML-прогноз
@@ -91,7 +91,7 @@ export default function ProcurementPage() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? 'Расчёт...' : 'Рассчитать закупки'}
         </button>
@@ -104,7 +104,7 @@ export default function ProcurementPage() {
       {data && !loading && (
         <div className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-400">
               Период: {data.date_from} — {data.date_to} | Позиций: {data.items.length}
             </p>
             <ExportButtons date={date} method={method} type="procurement" />

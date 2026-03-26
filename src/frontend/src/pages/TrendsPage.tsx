@@ -42,8 +42,8 @@ export default function TrendsPage() {
   return (
     <>
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-900">Тренды спроса</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-xl font-bold text-gradient">Тренды спроса</h2>
+        <p className="text-sm text-slate-400">
           Анализ изменения спроса по блюдам за последние {data?.weeks ?? 12} недель
         </p>
       </div>
@@ -58,7 +58,7 @@ export default function TrendsPage() {
 
           {data.growing.length > 0 && (
             <section>
-              <h3 className="mb-3 text-lg font-semibold text-slate-900">
+              <h3 className="mb-3 text-lg font-semibold text-white">
                 Растущие блюда
               </h3>
               <TrendTable trends={data.growing} />
@@ -67,7 +67,7 @@ export default function TrendsPage() {
 
           {data.declining.length > 0 && (
             <section>
-              <h3 className="mb-3 text-lg font-semibold text-slate-900">
+              <h3 className="mb-3 text-lg font-semibold text-white">
                 Падающие блюда
               </h3>
               <TrendTable trends={data.declining} />
@@ -75,7 +75,7 @@ export default function TrendsPage() {
           )}
 
           {data.growing.length === 0 && data.declining.length === 0 && (
-            <p className="py-12 text-center text-sm text-slate-500">
+            <p className="py-12 text-center text-sm text-slate-400">
               Нет данных о трендах за выбранный период
             </p>
           )}

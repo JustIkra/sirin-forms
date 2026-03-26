@@ -44,10 +44,10 @@ function CustomTooltip({
   const row = (payload[0]?.payload ?? {}) as ChartRow | undefined;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-md">
-      <p className="text-sm font-medium text-slate-900">{row?.fullDate ?? label}</p>
+    <div className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 shadow-xl">
+      <p className="text-sm font-medium text-white">{row?.fullDate ?? label}</p>
       {row?.isHoliday && row.holidayName && (
-        <p className="text-xs text-amber-600">{row.holidayName}</p>
+        <p className="text-xs text-amber-400">{row.holidayName}</p>
       )}
       <div className="mt-1 space-y-0.5">
         {payload.map((entry) => (
@@ -74,21 +74,21 @@ export default function AccuracyChart({ days }: Props) {
   const holidays = data.filter((d) => d.isHoliday);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-medium text-slate-700">
+    <div className="glass-card p-4">
+      <h3 className="mb-3 text-sm font-medium text-slate-300">
         Точность прогнозов по дням
       </h3>
       <ResponsiveContainer width="100%" height={350}>
         <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#94a3b8' }}
             interval="preserveStartEnd"
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#94a3b8' }}
             tickFormatter={(v: number) => `${v}%`}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -131,7 +131,7 @@ export default function AccuracyChart({ days }: Props) {
         </LineChart>
       </ResponsiveContainer>
       {holidays.length > 0 && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-slate-400">
           <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
           Праздничные дни
         </p>

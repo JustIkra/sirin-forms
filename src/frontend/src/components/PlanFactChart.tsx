@@ -26,19 +26,19 @@ export default function PlanFactChart({ records }: Props) {
   const height = Math.max(300, data.length * 36);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-medium text-slate-700">
+    <div className="glass-card p-4">
+      <h3 className="mb-3 text-sm font-medium text-slate-300">
         План-факт по блюдам
       </h3>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} layout="vertical" margin={{ left: 120, right: 20 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" />
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#ffffff10" />
+          <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} />
           <YAxis
             type="category"
             dataKey="name"
             width={110}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#94a3b8' }}
           />
           <Tooltip
             formatter={(value, name) => [
