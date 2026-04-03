@@ -27,7 +27,7 @@ class OpenRouterApiError(ApiClientError):
 
 
 class WeatherApiError(ApiClientError):
-    """OpenWeatherMap API returned an error."""
+    """Weather API returned an error."""
 
 
 class ForecastError(GurmanError):

@@ -1,6 +1,6 @@
 import type {
-  AccuracyHistoryResponse,
   DailyForecastResult,
+  DiscrepancyAnalysisResponse,
   PlanFactResponse,
   ProcurementList,
   TrendsResponse,
@@ -53,9 +53,21 @@ export async function fetchPlanFact(
   return res.json();
 }
 
-export async function fetchAccuracyHistory(days = 30): Promise<AccuracyHistoryResponse> {
-  const res = await fetch(`${BASE_URL}/api/accuracy-history?days=${days}`);
-  if (!res.ok) throw new ForecastError(res.status, 'Ошибка загрузки истории accuracy');
+export async function fetchDiscrepancyAnalysis(
+  date: string,
+  method: 'llm' | 'ml' = 'llm',
+): Promise<DiscrepancyAnalysisResponse> {
+  const res = await fetch(`${BASE_URL}/api/plan-fact/analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, method }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ForecastError(res.status, body.detail ?? 'Ошибка анализа отклонений');
+  }
+
   return res.json();
 }
 

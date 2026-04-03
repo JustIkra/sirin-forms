@@ -102,7 +102,7 @@ export default function ProcurementPage() {
       {error && <ErrorMessage message={error.message} status={error.status} />}
 
       {data && !loading && (
-        <div className="mt-6 space-y-4">
+        <div id="print-area-procurement" className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-400">
               Период: {data.date_from} — {data.date_to} | Позиций: {data.items.length}

@@ -2,8 +2,8 @@ export interface DishForecast {
   dish_id: string;
   dish_name: string;
   predicted_quantity: number;
-  confidence: number;
   key_factors: string[];
+  price: number | null;
 }
 
 export interface DailyForecastResult {
@@ -22,6 +22,9 @@ export interface PlanFactRecord {
   predicted_quantity: number;
   actual_quantity: number;
   deviation_pct: number;
+  predicted_revenue: number;
+  actual_revenue: number;
+  revenue_deviation_pct: number;
 }
 
 export interface PlanFactSummary {
@@ -31,6 +34,8 @@ export interface PlanFactSummary {
   accuracy: number;
   quality_rating: string;
   dish_count: number;
+  total_predicted_revenue: number;
+  total_actual_revenue: number;
 }
 
 export interface PlanFactResponse {
@@ -39,31 +44,31 @@ export interface PlanFactResponse {
   summary: PlanFactSummary;
 }
 
-// --- Dashboard ---
+// --- Discrepancy Analysis ---
 
-export interface MethodAccuracy {
-  accuracy: number;
-  mape: number;
-  dish_count: number;
+export interface DishDiscrepancyInsight {
+  dish_name: string;
+  predicted_quantity: number;
+  actual_quantity: number;
+  deviation_pct: number;
+  explanation: string;
+  category: string;
 }
 
-export interface AccuracyDayRecord {
+export interface DiscrepancyRecommendation {
+  title: string;
+  description: string;
+  priority: number;
+}
+
+export interface DiscrepancyAnalysisResponse {
   date: string;
-  weekday: string;
-  is_holiday: boolean;
-  holiday_name: string | null;
-  ml: MethodAccuracy | null;
-  llm: MethodAccuracy | null;
-  actual_total: number;
-}
-
-export interface AccuracyHistoryResponse {
-  days: AccuracyDayRecord[];
-  summary: {
-    ml_avg_accuracy: number;
-    llm_avg_accuracy: number;
-    days_count: number;
-  };
+  method: string;
+  overall_analysis: string;
+  top_factors: string[];
+  dish_insights: DishDiscrepancyInsight[];
+  recommendations: DiscrepancyRecommendation[];
+  accuracy_context: string;
 }
 
 // --- Trends ---
@@ -103,4 +108,4 @@ export interface ProcurementList {
 
 // --- Pages ---
 
-export type PageId = 'dashboard' | 'forecast' | 'trends' | 'procurement';
+export type PageId = 'forecast' | 'trends' | 'procurement';

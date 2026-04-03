@@ -140,6 +140,51 @@ class PromptBuilder:
         return "\n".join(lines)
 
     @staticmethod
+    def build_retrospective(
+        plan_fact_records: list["PlanFactRecord"],
+        mape: float,
+    ) -> str:
+        from app.models.forecast import PlanFactRecord  # noqa: F811
+
+        if not plan_fact_records:
+            return "Ретроспектива недоступна — нет данных план-факт за прошлую неделю."
+
+        lines = [
+            f"## Ретроспектива: точность прогнозов за последние дни (MAPE {mape:.1f}%)",
+            "",
+            "Ниже — блюда с наибольшими отклонениями. Учти эти ошибки и скорректируй прогноз.",
+            "",
+            f"{'Блюдо':<35} {'Прогноз':>8} {'Факт':>8} {'Откл%':>8} {'Смещение':>10}",
+            "-" * 73,
+        ]
+
+        # Sort by absolute deviation descending, take top 15
+        sorted_records = sorted(
+            plan_fact_records, key=lambda r: abs(r.deviation_pct), reverse=True,
+        )[:15]
+
+        for r in sorted_records:
+            bias = "завышал" if r.predicted_quantity > r.actual_quantity else "занижал"
+            lines.append(
+                f"{r.dish_name:<35} {r.predicted_quantity:>8.0f} {r.actual_quantity:>8.0f} "
+                f"{r.deviation_pct:>+7.1f}% {bias:>10}"
+            )
+
+        # Summary bias
+        total_pred = sum(r.predicted_quantity for r in plan_fact_records)
+        total_act = sum(r.actual_quantity for r in plan_fact_records)
+        if total_act > 0:
+            overall_bias = (total_pred - total_act) / total_act * 100
+            direction = "завышение" if overall_bias > 0 else "занижение"
+            lines.append("")
+            lines.append(
+                f"Общее смещение: {overall_bias:+.1f}% ({direction}). "
+                f"Прогноз: {total_pred:.0f}, Факт: {total_act:.0f}."
+            )
+
+        return "\n".join(lines)
+
+    @staticmethod
     def build_menu_info(dishes: list[IikoProduct]) -> str:
         if not dishes:
             return "Меню не загружено."

@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import logging
-import re
 from collections import defaultdict
 
 from app.clients.openrouter import OpenRouterClient
@@ -11,6 +10,7 @@ from app.models.forecast import DailyForecastResult
 from app.models.iiko import IikoProduct
 from app.models.weather import DailyWeather
 from app.repositories.forecasts import ForecastsRepository
+from app.repositories.sales import SalesRepository
 from app.services.data_collector import DataCollector
 from app.services.prompt_builder import PromptBuilder
 from app.utils.calendar import get_calendar_context
@@ -26,12 +26,14 @@ class ForecastService:
         prompt_builder: PromptBuilder,
         openrouter_client: OpenRouterClient,
         forecasts_repo: ForecastsRepository,
+        sales_repo: SalesRepository,
         settings: Settings,
     ) -> None:
         self._collector = data_collector
         self._prompt = prompt_builder
         self._openrouter = openrouter_client
         self._forecasts_repo = forecasts_repo
+        self._sales_repo = sales_repo
         self._settings = settings
 
     async def generate_forecast(
@@ -39,6 +41,7 @@ class ForecastService:
         target_date: datetime.date,
         *,
         force: bool = False,
+        _backfill: bool = True,
     ) -> DailyForecastResult:
         # 1. Cache check
         if not force:
@@ -68,6 +71,12 @@ class ForecastService:
         active_dishes = [
             d for d in dishes
             if d.id in sold_ids or d.name.strip().lower() in sold_names
+        ]
+
+        # Only keep dishes with price and included in menu
+        active_dishes = [
+            d for d in active_dishes
+            if d.price and d.price > 0 and d.included_in_menu
         ]
 
         # Exclude ingredients, modifiers, and internal items from forecast
@@ -104,39 +113,91 @@ class ForecastService:
 
         logger.debug("Sales prompt (%d chars): %.500s", len(sales_data), sales_data)
 
-        # 6. LLM forecast
+        # 6. Backfill + retrospective
+        retrospective = ""
+        if _backfill:
+            retrospective = await self._backfill_and_get_retrospective(target_date)
+            if retrospective:
+                logger.info("Retrospective included (%d chars)", len(retrospective))
+
+        # 7. LLM forecast
         try:
             result = await self._openrouter.generate_daily_forecast(
                 sales_data=sales_data,
                 weather_data=weather_data,
                 calendar_info=calendar_info,
                 menu_info=menu_info,
+                retrospective=retrospective,
             )
         except Exception as exc:
             raise ForecastError(f"LLM forecast failed: {exc}") from exc
 
-        # 7. Post-processing
+        # 8. Post-processing
         result = self._post_process_forecast(result, active_dishes, weather, target_date)
 
-        # 8. Save and return
+        # 9. Save and return
         await self._forecasts_repo.save_forecast(result)
         logger.info("Forecast saved for %s: %d dishes", target_date, len(result.forecasts))
         return result
 
-    # Pattern to detect ingredients/addons: name ending with "NN гр", "NN мл", etc.
-    _INGREDIENT_RE = re.compile(r"\d+\s*(?:гр\.?|мл\.?|мг)\s*$", re.IGNORECASE)
+    async def _backfill_and_get_retrospective(self, target_date: datetime.date) -> str:
+        """Backfill missing LLM forecasts for X-7..X-1, then build retrospective."""
+        today = datetime.date.today()
+        dates = [
+            target_date - datetime.timedelta(days=i)
+            for i in range(1, 8)
+            if (target_date - datetime.timedelta(days=i)) <= today
+        ]
+
+        # Backfill missing forecasts (without recursion)
+        for d in dates:
+            existing = await self._forecasts_repo.get_forecast(d, method="llm")
+            if existing is None:
+                logger.info("Backfilling LLM forecast for %s", d)
+                try:
+                    await self.generate_forecast(d, force=False, _backfill=False)
+                except Exception:
+                    logger.warning("Backfill failed for %s, skipping", d, exc_info=True)
+
+        # Collect plan-fact for all backfilled dates
+        all_records = []
+        for d in dates:
+            forecast = await self._forecasts_repo.get_forecast(d, method="llm")
+            if forecast is None:
+                continue
+            sales = await self._sales_repo.get_sales_by_period(d, d)
+            if not sales:
+                continue
+            actual_sales = [
+                {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+                for s in sales
+            ]
+            records = await self._forecasts_repo.get_plan_fact(d, d, actual_sales, method="llm")
+            all_records.extend(records)
+
+        if not all_records:
+            return ""
+
+        # Calculate average MAPE
+        deviations = [
+            abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
+            for r in all_records
+            if r.actual_quantity > 0
+        ]
+        avg_mape = (sum(deviations) / len(deviations) * 100) if deviations else 0.0
+
+        return self._prompt.build_retrospective(all_records, avg_mape)
+
     _NON_DISH_PREFIXES = ("+", "-", "Заказ ")
-    _NON_DISH_KEYWORDS = ("комплимент", "замена чаши", "на чаше", "подарок")
+    _NON_DISH_KEYWORDS = ("комплимент", "замена чаши", "на чаше", "подарок", "персонал")
 
     @staticmethod
     def _is_non_dish(name: str) -> bool:
-        """Return True for ingredients, modifiers, and internal items."""
+        """Return True for modifiers and internal items."""
         stripped = name.strip()
         if any(stripped.startswith(p) for p in ForecastService._NON_DISH_PREFIXES):
             return True
         if any(kw in stripped.lower() for kw in ForecastService._NON_DISH_KEYWORDS):
-            return True
-        if ForecastService._INGREDIENT_RE.search(stripped):
             return True
         return False
 
@@ -186,6 +247,10 @@ class ForecastService:
         active_ids = {d.id for d in active_dishes}
         active_names = {d.name.strip().lower() for d in active_dishes}
 
+        # Build price lookup from catalog
+        price_by_id = {d.id: d.price for d in active_dishes if d.price}
+        price_by_name = {d.name.strip().lower(): d.price for d in active_dishes if d.price}
+
         filtered = []
         for dish in result.forecasts:
             if dish.dish_id not in active_ids and dish.dish_name.strip().lower() not in active_names:
@@ -193,6 +258,7 @@ class ForecastService:
                 continue
             dish.predicted_quantity = max(0.0, dish.predicted_quantity)
             dish.confidence = max(0.0, min(1.0, dish.confidence))
+            dish.price = price_by_id.get(dish.dish_id) or price_by_name.get(dish.dish_name.strip().lower())
             filtered.append(dish)
 
         cal = get_calendar_context(target_date)

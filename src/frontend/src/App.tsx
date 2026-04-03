@@ -1,17 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import ForecastForm from './components/ForecastForm';
 import ForecastTable from './components/ForecastTable';
-import ForecastChart from './components/ForecastChart';
 import ForecastMeta from './components/ForecastMeta';
 import PlanFactSection from './components/PlanFactSection';
+import ExportButtons from './components/ExportButtons';
 import Spinner from './components/Spinner';
 import ErrorMessage from './components/ErrorMessage';
-import DashboardPage from './pages/DashboardPage';
 import TrendsPage from './pages/TrendsPage';
 import ProcurementPage from './pages/ProcurementPage';
-import { fetchForecast, ForecastError } from './api/forecast';
-import type { DailyForecastResult, PageId } from './types/forecast';
+import { fetchForecast, fetchPlanFact, ForecastError } from './api/forecast';
+import type { DailyForecastResult, PlanFactResponse, PageId } from './types/forecast';
 
 export default function App() {
   const [page, setPage] = useState<PageId>('forecast');
@@ -19,6 +18,27 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [method, setMethod] = useState<'llm' | 'ml'>('llm');
+  const [planFact, setPlanFact] = useState<PlanFactResponse | null>(null);
+  const [planFactLoading, setPlanFactLoading] = useState(false);
+
+  useEffect(() => {
+    if (!result) {
+      setPlanFact(null);
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (result.date > today) {
+      setPlanFact(null);
+      return;
+    }
+    let cancelled = false;
+    setPlanFactLoading(true);
+    fetchPlanFact(result.date, result.method)
+      .then((data) => { if (!cancelled) setPlanFact(data); })
+      .catch(() => { if (!cancelled) setPlanFact(null); })
+      .finally(() => { if (!cancelled) setPlanFactLoading(false); });
+    return () => { cancelled = true; };
+  }, [result]);
 
   const handleSubmit = async (date: string, force: boolean, m: 'llm' | 'ml') => {
     setLoading(true);
@@ -40,8 +60,6 @@ export default function App() {
 
   return (
     <Layout activePage={page} onNavigate={setPage}>
-      {page === 'dashboard' && <DashboardPage />}
-
       {page === 'forecast' && (
         <>
           <div className="mb-6">
@@ -62,13 +80,14 @@ export default function App() {
           {error && <ErrorMessage message={error.message} status={error.status} />}
 
           {result && !loading && (
-            <div className="mt-6 space-y-6">
+            <div id="print-area-forecast" className="mt-6 space-y-6">
               <ForecastMeta result={result} />
-              <div className="grid gap-6 xl:grid-cols-2">
-                <ForecastTable forecasts={result.forecasts} />
-                <ForecastChart forecasts={result.forecasts} />
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-white">Прогноз по блюдам</h3>
+                <ExportButtons date={result.date} method={result.method} type="forecast" />
               </div>
-              <PlanFactSection forecastDate={result.date} method={result.method} />
+              <ForecastTable forecasts={result.forecasts} planFact={planFact?.records} />
+              <PlanFactSection data={planFact} loading={planFactLoading} />
             </div>
           )}
         </>

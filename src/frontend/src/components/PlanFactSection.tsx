@@ -1,46 +1,38 @@
 import { useEffect, useState } from 'react';
-import { fetchPlanFact } from '../api/forecast';
-import type { PlanFactResponse } from '../types/forecast';
+import type { DiscrepancyAnalysisResponse, PlanFactResponse } from '../types/forecast';
+import { fetchDiscrepancyAnalysis } from '../api/forecast';
 import PlanFactSummaryCard from './PlanFactSummary';
 import PlanFactTable from './PlanFactTable';
-import PlanFactChart from './PlanFactChart';
+import DiscrepancyAnalysis from './DiscrepancyAnalysis';
 
 interface Props {
-  forecastDate: string;
-  method: 'llm' | 'ml';
+  data: PlanFactResponse | null;
+  loading: boolean;
 }
 
-export default function PlanFactSection({ forecastDate, method }: Props) {
-  const [data, setData] = useState<PlanFactResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function PlanFactSection({ data, loading }: Props) {
+  const [analysis, setAnalysis] = useState<DiscrepancyAnalysisResponse | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    if (forecastDate > today) {
-      setData(null);
-      return;
+    setAnalysis(null);
+    setAnalysisError(null);
+  }, [data?.date]);
+
+  const handleRequestAnalysis = async () => {
+    if (!data) return;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const result = await fetchDiscrepancyAnalysis(data.date);
+      setAnalysis(result);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Ошибка анализа');
+    } finally {
+      setAnalysisLoading(false);
     }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetchPlanFact(forecastDate, method)
-      .then((result) => {
-        if (!cancelled) setData(result);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Не удалось загрузить план-факт');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [forecastDate, method]);
+  };
 
   if (loading) {
     return (
@@ -53,25 +45,19 @@ export default function PlanFactSection({ forecastDate, method }: Props) {
     );
   }
 
-  if (error) {
-    return (
-      <div className="mt-8">
-        <h2 className="mb-4 text-xl font-bold text-white">План-факт</h2>
-        <p className="text-sm text-red-400">{error}</p>
-      </div>
-    );
-  }
-
   if (!data) return null;
 
   return (
     <div className="mt-8 space-y-6">
       <h2 className="text-xl font-bold text-white">План-факт</h2>
       <PlanFactSummaryCard summary={data.summary} />
-      <div className="grid gap-6 xl:grid-cols-2">
-        <PlanFactTable records={data.records} />
-        <PlanFactChart records={data.records} />
-      </div>
+      <PlanFactTable records={data.records} />
+      <DiscrepancyAnalysis
+        data={analysis}
+        loading={analysisLoading}
+        error={analysisError}
+        onRequestAnalysis={handleRequestAnalysis}
+      />
     </div>
   );
 }

@@ -10,16 +10,10 @@ const METHOD_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function ForecastMeta({ result }: Props) {
-  const avgConfidence =
-    result.forecasts.length > 0
-      ? result.forecasts.reduce((s, f) => s + f.confidence, 0) /
-        result.forecasts.length
-      : 0;
-
   const methodInfo = METHOD_LABELS[result.method] ?? METHOD_LABELS.llm;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card label="Дата" value={result.date} />
       <div className="glass-card p-4">
         <span className="text-xs font-medium text-slate-400 uppercase">Метод</span>
@@ -38,12 +32,8 @@ export default function ForecastMeta({ result }: Props) {
         value={result.is_holiday ? 'Да' : 'Нет'}
         accent={result.is_holiday}
       />
-      <Card
-        label="Средняя уверенность"
-        value={`${Math.round(avgConfidence * 100)}%`}
-      />
       {result.notes && (
-        <div className="glass-card p-4 sm:col-span-2 lg:col-span-5">
+        <div className="glass-card p-4 sm:col-span-2 lg:col-span-4">
           <span className="text-xs font-medium text-slate-400 uppercase">Заметки</span>
           <p className="mt-1 text-sm text-slate-300">{result.notes}</p>
         </div>

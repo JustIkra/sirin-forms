@@ -1,3 +1,5 @@
+import asyncio
+import datetime
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -11,7 +13,9 @@ from app.clients.iiko import IikoClient
 from app.clients.openrouter import OpenRouterClient
 from app.clients.weather import WeatherClient
 from app.config import Settings
-from app.db import Base, create_engine, create_session_factory
+from sqlalchemy import text
+
+from app.db import Base, WeatherRecord, create_engine, create_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = create_engine(settings.database_url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Migrate: add new columns if missing
+        await conn.execute(text(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS"
+            " included_in_menu BOOLEAN DEFAULT FALSE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS"
+            " price FLOAT"
+        ))
     app.state.session_factory = create_session_factory(engine)
     app.state.settings = settings
 
@@ -43,14 +56,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.openrouter_client = openrouter
 
     weather = WeatherClient(
-        api_key=settings.owm_api_key.get_secret_value(),
         lat=settings.restaurant_lat,
         lon=settings.restaurant_lon,
+        timeout=60.0,
     )
     await weather.__aenter__()
     app.state.weather_client = weather
 
     logger.info("Application started")
+
+    # Backfill weather data in background
+    asyncio.create_task(_backfill_weather(weather, app.state.session_factory))
 
     yield
 
@@ -60,6 +76,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await openrouter.close()
     await engine.dispose()
     logger.info("Application stopped")
+
+
+async def _backfill_weather(weather_client: WeatherClient, session_factory) -> None:
+    """Fetch historical weather for the past year if missing."""
+    from sqlalchemy import func, select
+    from app.repositories.weather import WeatherRepository
+
+    try:
+        async with session_factory() as session:
+            count = await session.scalar(select(func.count()).select_from(WeatherRecord))
+            if count and count >= 80:
+                logger.info("Weather backfill: %d records exist, skipping", count)
+                return
+
+        today = datetime.date.today()
+        date_from = today - datetime.timedelta(days=90)
+        logger.info("Weather backfill: fetching %s — %s", date_from, today)
+
+        days = await weather_client.get_range(date_from, today)
+        logger.info("Weather backfill: got %d days from API", len(days))
+
+        async with session_factory() as session:
+            repo = WeatherRepository(session)
+            for day in days:
+                await repo.save_daily_weather(day)
+            await session.commit()
+
+        logger.info("Weather backfill: saved %d days", len(days))
+    except Exception:
+        logger.warning("Weather backfill failed", exc_info=True)
 
 
 app = FastAPI(

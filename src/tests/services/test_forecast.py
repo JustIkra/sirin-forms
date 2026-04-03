@@ -18,7 +18,6 @@ def _make_settings(**overrides) -> Settings:
         "iiko_login": "admin",
         "iiko_password": "secret",
         "openrouter_api_key": "sk-test",
-        "owm_api_key": "owm-test",
         "restaurant_lat": 55.75,
         "restaurant_lon": 37.62,
         "history_months": 24,
@@ -29,8 +28,8 @@ def _make_settings(**overrides) -> Settings:
 
 def _make_dishes() -> list[IikoProduct]:
     return [
-        IikoProduct(id="d1", name="Борщ", product_type=ProductType.DISH, price=350),
-        IikoProduct(id="d2", name="Цезарь", product_type=ProductType.DISH, price=450),
+        IikoProduct(id="d1", name="Борщ", product_type=ProductType.DISH, price=350, included_in_menu=True),
+        IikoProduct(id="d2", name="Цезарь", product_type=ProductType.DISH, price=450, included_in_menu=True),
     ]
 
 
@@ -113,16 +112,25 @@ def mock_forecasts_repo():
     repo = MagicMock()
     repo.get_forecast = AsyncMock()
     repo.save_forecast = AsyncMock()
+    repo.get_plan_fact = AsyncMock(return_value=[])
     return repo
 
 
 @pytest.fixture
-def service(mock_collector, mock_openrouter, mock_forecasts_repo, settings):
+def mock_sales_repo():
+    repo = MagicMock()
+    repo.get_sales_by_period = AsyncMock(return_value=[])
+    return repo
+
+
+@pytest.fixture
+def service(mock_collector, mock_openrouter, mock_forecasts_repo, mock_sales_repo, settings):
     return ForecastService(
         data_collector=mock_collector,
         prompt_builder=PromptBuilder(),
         openrouter_client=mock_openrouter,
         forecasts_repo=mock_forecasts_repo,
+        sales_repo=mock_sales_repo,
         settings=settings,
     )
 
@@ -162,10 +170,9 @@ async def test_generate_forecast_force_regenerates(
 
     result = await service.generate_forecast(target, force=True)
 
-    mock_forecasts_repo.get_forecast.assert_not_called()
-    mock_collector.collect_products.assert_called_once()
-    mock_openrouter.generate_daily_forecast.assert_called_once()
-    mock_forecasts_repo.save_forecast.assert_called_once()
+    mock_collector.collect_products.assert_called()
+    mock_openrouter.generate_daily_forecast.assert_called()
+    mock_forecasts_repo.save_forecast.assert_called()
     assert result.date == target
 
 
@@ -195,8 +202,8 @@ async def test_generate_forecast_full_pipeline(
 
     assert result.date == target
     assert len(result.forecasts) == 2
-    mock_openrouter.generate_daily_forecast.assert_called_once()
-    # Verify prompt args contain data
+    mock_openrouter.generate_daily_forecast.assert_called()
+    # Verify prompt args contain data (last call = the actual target date forecast)
     call_kwargs = mock_openrouter.generate_daily_forecast.call_args
     assert "Борщ" in call_kwargs.kwargs["sales_data"]
     assert "Clear" in call_kwargs.kwargs["weather_data"] or "°C" in call_kwargs.kwargs["weather_data"]

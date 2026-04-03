@@ -34,6 +34,7 @@ class ProductRecord(Base):
     code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     product_type: Mapped[str] = mapped_column(String(20))
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    included_in_menu: Mapped[bool] = mapped_column(default=False)
 
     ingredients: Mapped[list["IngredientRecord"]] = relationship(
         back_populates="product", cascade="all, delete-orphan",
@@ -76,6 +77,7 @@ class ForecastRecord(Base):
     dish_name: Mapped[str] = mapped_column(String(200))
     predicted_quantity: Mapped[float] = mapped_column(Float)
     confidence: Mapped[float] = mapped_column(Float)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
     key_factors: Mapped[str | None] = mapped_column(Text, nullable=True)
     weather: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_holiday: Mapped[bool] = mapped_column(default=False)
@@ -85,6 +87,19 @@ class ForecastRecord(Base):
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(tz=MSK),
     )
+
+
+class DishCatalogRecord(Base):
+    __tablename__ = "dish_catalog"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    canonical_name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    category: Mapped[str] = mapped_column(String(50), index=True)
+    is_revenue: Mapped[bool] = mapped_column(default=True)
+    dish_ids: Mapped[list] = mapped_column(JSON, default=list)
+    total_volume: Mapped[float] = mapped_column(Float, default=0.0)
+    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class MLModelRecord(Base):

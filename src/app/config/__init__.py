@@ -14,8 +14,7 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr
     openrouter_model: str = "google/gemini-3-flash-preview"
 
-    # OpenWeatherMap
-    owm_api_key: SecretStr
+    # Weather (Open-Meteo, no key needed)
     restaurant_lat: float
     restaurant_lon: float
 

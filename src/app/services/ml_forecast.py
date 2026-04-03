@@ -52,6 +52,7 @@ class MLForecastService:
         target_date: datetime.date,
         *,
         force: bool = False,
+        _backfill: bool = True,
     ) -> DailyForecastResult:
         # 1. Cache check
         if not force:
@@ -102,6 +103,22 @@ class MLForecastService:
                 confidence=0.7 if model_record else 0.4,
                 key_factors=["ML-модель (HistGBR)" if model_record else "Среднее за 4 недели (fallback)"],
             ))
+
+        # Bias calibration from backfilled forecasts
+        if _backfill:
+            bias = await self._backfill_and_get_bias(target_date)
+            if bias:
+                logger.info("Applying bias calibration for %d dishes", len(bias))
+                for dish_forecast in forecasts:
+                    key = dish_forecast.dish_name.strip().lower()
+                    if key in bias:
+                        correction = max(0.5, min(1.5, 1 - bias[key]))
+                        old_qty = dish_forecast.predicted_quantity
+                        dish_forecast.predicted_quantity = max(0.0, round(old_qty * correction))
+                        logger.debug(
+                            "Bias correction %s: %.0f → %.0f (bias=%.2f)",
+                            dish_forecast.dish_name, old_qty, dish_forecast.predicted_quantity, bias[key],
+                        )
 
         cal = get_calendar_context(target_date)
         weather_str = ForecastService._format_weather(weather)
@@ -155,6 +172,58 @@ class MLForecastService:
                 )
 
         return fallback
+
+    async def _backfill_and_get_bias(self, target_date: datetime.date) -> dict[str, float]:
+        """Backfill missing ML forecasts for X-7..X-1, then compute per-dish bias."""
+        today = datetime.date.today()
+        dates = [
+            target_date - datetime.timedelta(days=i)
+            for i in range(1, 8)
+            if (target_date - datetime.timedelta(days=i)) <= today
+        ]
+
+        # Backfill missing forecasts (without recursion)
+        for d in dates:
+            existing = await self._forecasts_repo.get_forecast(d, method="ml")
+            if existing is None:
+                logger.info("Backfilling ML forecast for %s", d)
+                try:
+                    await self.generate_forecast(d, force=False, _backfill=False)
+                except Exception:
+                    logger.warning("ML backfill failed for %s, skipping", d, exc_info=True)
+
+        # Collect plan-fact for all backfilled dates
+        all_records = []
+        for d in dates:
+            forecast = await self._forecasts_repo.get_forecast(d, method="ml")
+            if forecast is None:
+                continue
+            sales = await self._sales_repo.get_sales_by_period(d, d)
+            if not sales:
+                continue
+            actual_sales = [
+                {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+                for s in sales
+            ]
+            records = await self._forecasts_repo.get_plan_fact(d, d, actual_sales, method="ml")
+            all_records.extend(records)
+
+        if not all_records:
+            return {}
+
+        # Compute per-dish mean signed error: (predicted - actual) / max(predicted, actual)
+        dish_errors: dict[str, list[float]] = defaultdict(list)
+        for r in all_records:
+            denom = max(r.predicted_quantity, r.actual_quantity)
+            if denom > 0:
+                error = (r.predicted_quantity - r.actual_quantity) / denom
+                dish_errors[r.dish_name.strip().lower()].append(error)
+
+        return {
+            name: sum(errors) / len(errors)
+            for name, errors in dish_errors.items()
+            if len(errors) >= 2  # require at least 2 data points
+        }
 
     @staticmethod
     def _same_weekday_average(sales: list[SaleRecord], target_date: datetime.date) -> float:

@@ -12,6 +12,11 @@ class ProductsRepository(BaseRepository[ProductRecord]):
         if not products:
             return 0
 
+        seen: dict[str, IikoProduct] = {}
+        for p in products:
+            seen[p.id] = p
+        products = list(seen.values())
+
         product_ids = [p.id for p in products]
 
         # Delete ingredients for products being synced
@@ -21,21 +26,15 @@ class ProductsRepository(BaseRepository[ProductRecord]):
         await self._session.execute(stmt)
 
         for product in products:
-            existing = await self._session.get(ProductRecord, product.id)
-            if existing:
-                existing.name = product.name
-                existing.code = product.code
-                existing.product_type = product.product_type
-                existing.price = product.price
-            else:
-                existing = ProductRecord(
-                    id=product.id,
-                    name=product.name,
-                    code=product.code,
-                    product_type=product.product_type,
-                    price=product.price,
-                )
-                self._session.add(existing)
+            record = ProductRecord(
+                id=product.id,
+                name=product.name,
+                code=product.code,
+                product_type=product.product_type,
+                price=product.price,
+                included_in_menu=product.included_in_menu,
+            )
+            await self._session.merge(record)
 
             for ing in product.ingredients:
                 self._session.add(IngredientRecord(
@@ -75,6 +74,7 @@ class ProductsRepository(BaseRepository[ProductRecord]):
             code=record.code,
             product_type=record.product_type,
             price=record.price,
+            included_in_menu=record.included_in_menu,
             ingredients=[
                 ProductIngredient(
                     product_id=i.ingredient_id,

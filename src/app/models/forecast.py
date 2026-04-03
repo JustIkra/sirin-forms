@@ -9,6 +9,7 @@ class DishForecast(BaseModel):
     predicted_quantity: float
     confidence: float
     key_factors: list[str] = []
+    price: float | None = None
 
 
 class DailyForecastResult(BaseModel):
@@ -42,6 +43,9 @@ class PlanFactRecord(BaseModel):
     predicted_quantity: float
     actual_quantity: float
     deviation_pct: float
+    predicted_revenue: float = 0.0
+    actual_revenue: float = 0.0
+    revenue_deviation_pct: float = 0.0
 
 
 class PlanFactSummary(BaseModel):
@@ -51,12 +55,39 @@ class PlanFactSummary(BaseModel):
     accuracy: float
     quality_rating: str
     dish_count: int
+    total_predicted_revenue: float = 0.0
+    total_actual_revenue: float = 0.0
 
 
 class PlanFactResponse(BaseModel):
     date: datetime.date
     records: list[PlanFactRecord]
     summary: PlanFactSummary
+
+
+class DishDiscrepancyInsight(BaseModel):
+    dish_name: str
+    predicted_quantity: float
+    actual_quantity: float
+    deviation_pct: float
+    explanation: str
+    category: str
+
+
+class DiscrepancyRecommendation(BaseModel):
+    title: str
+    description: str
+    priority: int
+
+
+class DiscrepancyAnalysisResponse(BaseModel):
+    date: datetime.date
+    method: str
+    overall_analysis: str
+    top_factors: list[str]
+    dish_insights: list[DishDiscrepancyInsight]
+    recommendations: list[DiscrepancyRecommendation]
+    accuracy_context: str
 
 
 class BusinessRecommendation(BaseModel):

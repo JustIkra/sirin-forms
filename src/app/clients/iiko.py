@@ -148,19 +148,20 @@ class IikoClient(BaseHttpClient):
             if include_deleted:
                 params["includeDeleted"] = "true"
             response = await self._request(
-                "GET", "/products", params=params,
-                headers={"Accept": "application/xml"},
+                "GET", "/v2/entities/products/list", params=params,
             )
-            items = self._parse_xml_list(response, "get_products")
+            items = self._parse_json(response, "get_products")
             return [
                 IikoProduct(
                     id=item["id"],
                     name=item.get("name", ""),
                     code=item.get("code"),
-                    product_type=item.get("productType", "DISH").lower(),
+                    product_type=item.get("type", "DISH").lower(),
+                    price=item.get("defaultSalePrice"),
+                    included_in_menu=item.get("defaultIncludedInMenu", False),
                 )
                 for item in items
-                if "id" in item
+                if "id" in item and not item.get("deleted", False)
             ]
 
     async def search_products(

@@ -75,8 +75,8 @@ class BaseHttpClient:
                 last_exc = exc
                 if attempt < self._max_retries:
                     logger.warning(
-                        "Transport error on %s %s (attempt %d/%d): %s",
-                        method, path, attempt, self._max_retries, exc,
+                        "Transport error on %s %s%s (attempt %d/%d): %s",
+                        method, self._base_url, path, attempt, self._max_retries, exc,
                     )
                     await asyncio.sleep(2 ** (attempt - 1))
                     continue

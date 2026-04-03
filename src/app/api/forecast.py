@@ -28,6 +28,7 @@ from app.models.forecast import (
     AccuracyHistoryResponse,
     AccuracyHistorySummary,
     DailyForecastResult,
+    DiscrepancyAnalysisResponse,
     DishTrend,
     MethodAccuracy,
     PlanFactResponse,
@@ -94,6 +95,7 @@ async def create_forecast(
                 prompt_builder=PromptBuilder(),
                 openrouter_client=openrouter_client,
                 forecasts_repo=forecasts_repo,
+                sales_repo=sales_repo,
                 settings=settings,
             )
         return await service.generate_forecast(body.date, force=body.force)
@@ -165,7 +167,8 @@ async def get_plan_fact(
         sales = await sales_repo.get_sales_by_period(date, date)
 
     actual_sales = [
-        {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+        {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name,
+         "quantity": s.quantity, "total": s.total}
         for s in sales
     ]
     records = await forecasts_repo.get_plan_fact(date, date, actual_sales, method=method)
@@ -181,6 +184,8 @@ async def get_plan_fact(
 
     total_predicted = sum(r.predicted_quantity for r in records)
     total_actual = sum(r.actual_quantity for r in records)
+    total_predicted_revenue = sum(r.predicted_revenue for r in records)
+    total_actual_revenue = sum(r.actual_revenue for r in records)
 
     summary = PlanFactSummary(
         total_predicted=round(total_predicted, 1),
@@ -189,9 +194,117 @@ async def get_plan_fact(
         accuracy=round(accuracy, 1),
         quality_rating=_quality_rating(mape),
         dish_count=len(records),
+        total_predicted_revenue=round(total_predicted_revenue, 0),
+        total_actual_revenue=round(total_actual_revenue, 0),
     )
 
     return PlanFactResponse(date=date, records=records, summary=summary)
+
+
+class DiscrepancyAnalysisRequest(BaseModel):
+    date: datetime.date
+    method: str = "llm"
+
+
+@router.post("/plan-fact/analysis", response_model=DiscrepancyAnalysisResponse)
+async def analyze_discrepancies(
+    body: DiscrepancyAnalysisRequest,
+    sales_repo: SalesRepository = Depends(get_sales_repo),
+    weather_repo: WeatherRepository = Depends(get_weather_repo),
+    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    openrouter_client: OpenRouterClient = Depends(get_openrouter_client),
+) -> DiscrepancyAnalysisResponse | JSONResponse:
+    today = datetime.date.today()
+    if body.date > today:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Дата в будущем — фактических данных нет"},
+        )
+
+    forecast = await forecasts_repo.get_forecast(body.date, method=body.method)
+    if not forecast:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Прогноз на эту дату не найден"},
+        )
+
+    # Actual sales from DB cache
+    sales = await sales_repo.get_sales_by_period(body.date, body.date)
+    if not sales:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Фактические продажи за эту дату отсутствуют"},
+        )
+
+    actual_sales = [
+        {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
+        for s in sales
+    ]
+    records = await forecasts_repo.get_plan_fact(body.date, body.date, actual_sales, method=body.method)
+
+    # MAPE / accuracy
+    deviations = [
+        abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
+        for r in records
+        if r.actual_quantity > 0
+    ]
+    mape = (sum(deviations) / len(deviations) * 100) if deviations else 0.0
+    accuracy = max(0.0, 100.0 - mape)
+    quality_rating = _quality_rating(mape)
+    total_predicted = sum(r.predicted_quantity for r in records)
+    total_actual = sum(r.actual_quantity for r in records)
+
+    # Plan-fact details as text table
+    pf_lines = [f"{'Блюдо':<40} {'Прогноз':>8} {'Факт':>8} {'Откл%':>8}"]
+    pf_lines.append("-" * 66)
+    sorted_records = sorted(records, key=lambda r: abs(r.deviation_pct), reverse=True)
+    for r in sorted_records:
+        pf_lines.append(
+            f"{r.dish_name:<40} {r.predicted_quantity:>8.0f} {r.actual_quantity:>8.0f} {r.deviation_pct:>+7.1f}%"
+        )
+    plan_fact_details = "\n".join(pf_lines)
+
+    # Extract key_factors and notes from stored forecast
+    kf_lines = []
+    for d in forecast.forecasts:
+        if d.key_factors:
+            kf_lines.append(f"- {d.dish_name}: {', '.join(d.key_factors)}")
+    forecast_key_factors = "\n".join(kf_lines) if kf_lines else "Нет данных"
+    forecast_notes = forecast.notes or "Нет заметок"
+
+    # Rebuild context from DB
+    prompt_builder = PromptBuilder()
+
+    historical_from = body.date - datetime.timedelta(days=372)
+    recent_from = body.date - datetime.timedelta(days=30)
+    recent_to = body.date - datetime.timedelta(days=1)
+
+    historical_sales = await sales_repo.get_sales_by_period(historical_from, recent_to)
+    recent_sales = await sales_repo.get_sales_by_period(recent_from, recent_to)
+
+    weather_list = await weather_repo.get_weather_range(body.date, body.date)
+    weather = weather_list[0] if weather_list else None
+
+    sales_data = prompt_builder.build_sales_data(historical_sales, recent_sales, body.date)
+    weather_data = prompt_builder.build_weather_data(weather)
+    calendar_info = prompt_builder.build_calendar_info(body.date)
+
+    result = await openrouter_client.generate_discrepancy_analysis(
+        plan_fact_details=plan_fact_details,
+        mape=round(mape, 1),
+        accuracy=round(accuracy, 1),
+        quality_rating=quality_rating,
+        total_predicted=round(total_predicted, 1),
+        total_actual=round(total_actual, 1),
+        forecast_key_factors=forecast_key_factors,
+        forecast_notes=forecast_notes,
+        sales_data=sales_data,
+        weather_data=weather_data,
+        calendar_info=calendar_info,
+    )
+    result.date = body.date
+    result.method = body.method
+    return result
 
 
 @router.get("/accuracy-history", response_model=AccuracyHistoryResponse)
@@ -216,7 +329,7 @@ async def get_accuracy_history(
         # Get actual sales for this date from DB
         sales = await sales_repo.get_sales_by_period(d, d)
         actual_sales = [
-            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
             for s in sales
         ]
         actual_total = sum(s.quantity for s in sales)
@@ -365,11 +478,12 @@ async def train_ml_models(
 async def export_data(
     date: datetime.date = Query(...),
     method: str = Query("ml"),
-    type: str = Query("forecast"),  # forecast | plan-fact
+    type: str = Query("forecast"),  # forecast | plan-fact | procurement
     format: str = Query("json"),    # json | csv | xlsx
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    settings: Settings = Depends(get_settings),
 ):
     import csv
     import io
@@ -381,17 +495,18 @@ async def export_data(
             return JSONResponse(status_code=404, content={"detail": "Прогноз не найден"})
         rows = [
             {"dish_name": d.dish_name, "predicted_quantity": d.predicted_quantity,
-             "confidence": d.confidence, "key_factors": ", ".join(d.key_factors)}
+             "key_factors": ", ".join(d.key_factors)}
             for d in forecast.forecasts
         ]
-        columns = ["dish_name", "predicted_quantity", "confidence", "key_factors"]
+        columns = ["dish_name", "predicted_quantity", "key_factors"]
+
     elif type == "plan-fact":
         forecast = await forecasts_repo.get_forecast(date, method=method)
         if not forecast:
             return JSONResponse(status_code=404, content={"detail": "Прогноз не найден"})
         sales = await sales_repo.get_sales_by_period(date, date)
         actual_sales = [
-            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
             for s in sales
         ]
         records = await forecasts_repo.get_plan_fact(date, date, actual_sales, method=method)
@@ -401,6 +516,25 @@ async def export_data(
             for r in records
         ]
         columns = ["dish_name", "predicted_quantity", "actual_quantity", "deviation_pct"]
+    elif type == "procurement":
+        from app.services.procurement import ProcurementService
+
+        service = ProcurementService(
+            iiko_client=iiko_client,
+            forecasts_repo=forecasts_repo,
+            sales_repo=sales_repo,
+            settings=settings,
+        )
+        try:
+            result = await service.generate_list(date, method=method)
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"detail": str(exc)})
+        rows = [
+            {"ingredient_name": i.ingredient_name, "unit": i.unit,
+             "required_amount": i.required_amount, "buffered_amount": i.buffered_amount}
+            for i in result.items
+        ]
+        columns = ["ingredient_name", "unit", "required_amount", "buffered_amount"]
     else:
         return JSONResponse(status_code=400, content={"detail": f"Unknown type: {type}"})
 

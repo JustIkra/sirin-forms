@@ -138,21 +138,14 @@ class DataCollector:
         if cached:
             return cached[0]
 
-        # Fetch from API and save all days
         try:
-            forecast = await self._weather.get_forecast_5day()
-            for day in forecast.daily:
+            day = await self._weather.get_weather(target_date)
+            if day:
                 await self._weather_repo.save_daily_weather(day)
+            return day
         except ApiClientError:
             logger.warning("Weather API unavailable", exc_info=True)
             return None
-
-        # Find the target date
-        for day in forecast.daily:
-            if day.date == target_date:
-                return day
-
-        return None
 
     @staticmethod
     def _build_historical_ranges(

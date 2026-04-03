@@ -34,6 +34,7 @@ class IikoProduct(BaseModel):
     code: str | None = None
     product_type: ProductType
     price: float | None = None
+    included_in_menu: bool = False
     ingredients: list[ProductIngredient] = []
 
 

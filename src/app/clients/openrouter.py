@@ -8,7 +8,11 @@ from pydantic import BaseModel, ValidationError
 from app.config.prompt_loader import load_prompt
 from app.exceptions import OpenRouterApiError
 from app.models.common import ChatMessage
-from app.models.forecast import BusinessRecommendation, DailyForecastResult
+from app.models.forecast import (
+    BusinessRecommendation,
+    DailyForecastResult,
+    DiscrepancyAnalysisResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,20 +71,19 @@ class OpenRouterClient:
         max_retries: int = 2,
     ) -> T:
         schema = response_model.model_json_schema()
-        system_msg = ChatMessage(
-            role="system",
-            content=(
-                f"Respond ONLY with valid JSON matching this schema:\n"
-                f"{json.dumps(schema, ensure_ascii=False)}"
-            ),
-        )
-        all_messages = [system_msg, *messages]
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": response_model.__name__,
+                "schema": schema,
+            },
+        }
 
         last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             raw = await self.complete(
-                all_messages, temperature=temperature, max_tokens=max_tokens,
-                response_format={"type": "json_object"},
+                messages, temperature=temperature, max_tokens=max_tokens,
+                response_format=response_format,
             )
             raw = self._strip_markdown_fences(raw)
             try:
@@ -91,13 +94,6 @@ class OpenRouterClient:
                     "Structured output validation failed (attempt %d/%d): %s",
                     attempt, max_retries, exc,
                 )
-                all_messages.append(ChatMessage(
-                    role="assistant", content=raw,
-                ))
-                all_messages.append(ChatMessage(
-                    role="user",
-                    content=f"Invalid JSON. Fix these errors: {exc.errors()}",
-                ))
 
         raise OpenRouterApiError(
             f"Structured output failed after {max_retries} retries: {last_exc}"
@@ -121,6 +117,7 @@ class OpenRouterClient:
         weather_data: str,
         calendar_info: str,
         menu_info: str,
+        retrospective: str = "",
     ) -> DailyForecastResult:
         cfg = load_prompt("forecast")
         messages = [
@@ -132,6 +129,7 @@ class OpenRouterClient:
                     weather_data=weather_data,
                     calendar_info=calendar_info,
                     menu_info=menu_info,
+                    retrospective=retrospective,
                 ),
             ),
         ]
@@ -160,3 +158,42 @@ class OpenRouterClient:
         raw = self._strip_markdown_fences(raw)
         items = json.loads(raw)
         return [BusinessRecommendation.model_validate(item) for item in items]
+
+    async def generate_discrepancy_analysis(
+        self,
+        plan_fact_details: str,
+        mape: float,
+        accuracy: float,
+        quality_rating: str,
+        total_predicted: float,
+        total_actual: float,
+        forecast_key_factors: str,
+        forecast_notes: str,
+        sales_data: str,
+        weather_data: str,
+        calendar_info: str,
+    ) -> DiscrepancyAnalysisResponse:
+        cfg = load_prompt("discrepancy_analysis")
+        messages = [
+            ChatMessage(role="system", content=cfg.system_prompt),
+            ChatMessage(
+                role="user",
+                content=cfg.user_template.format(
+                    plan_fact_details=plan_fact_details,
+                    mape=mape,
+                    accuracy=accuracy,
+                    quality_rating=quality_rating,
+                    total_predicted=total_predicted,
+                    total_actual=total_actual,
+                    forecast_key_factors=forecast_key_factors,
+                    forecast_notes=forecast_notes,
+                    sales_data=sales_data,
+                    weather_data=weather_data,
+                    calendar_info=calendar_info,
+                ),
+            ),
+        ]
+        return await self.complete_structured(
+            messages, DiscrepancyAnalysisResponse,
+            temperature=cfg.temperature, max_tokens=cfg.max_tokens,
+        )

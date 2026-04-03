@@ -29,24 +29,26 @@ async def client(mock_server):
     await c.__aexit__(None, None, None)
 
 
-PRODUCTS_XML = """\
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<productDtoes>
-  <productDto>
-    <id>p1</id>
-    <name>Борщ</name>
-    <code>001</code>
-    <productType>DISH</productType>
-    <mainUnit>порц</mainUnit>
-  </productDto>
-  <productDto>
-    <id>p2</id>
-    <name>Хлеб</name>
-    <code>BRD</code>
-    <productType>GOODS</productType>
-    <mainUnit>шт</mainUnit>
-  </productDto>
-</productDtoes>"""
+PRODUCTS_JSON = [
+    {
+        "id": "p1",
+        "name": "Борщ",
+        "code": "001",
+        "type": "DISH",
+        "defaultSalePrice": 450,
+        "defaultIncludedInMenu": True,
+        "deleted": False,
+    },
+    {
+        "id": "p2",
+        "name": "Хлеб",
+        "code": "BRD",
+        "type": "GOODS",
+        "defaultSalePrice": 50,
+        "defaultIncludedInMenu": False,
+        "deleted": False,
+    },
+]
 
 DEPARTMENTS_XML = """\
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -69,10 +71,8 @@ async def test_auth_success(client, mock_server):
     respx.get(f"{mock_server}/resto/api/auth").mock(
         return_value=Response(200, text='"test-token-123"'),
     )
-    respx.get(f"{mock_server}/resto/api/products").mock(
-        return_value=_xml_response(
-            '<productDtoes></productDtoes>',
-        ),
+    respx.get(f"{mock_server}/resto/api/v2/entities/products/list").mock(
+        return_value=_json_response([]),
     )
     respx.get(f"{mock_server}/resto/api/logout").mock(
         return_value=Response(200),
@@ -97,8 +97,8 @@ async def test_get_products_parses_response(client, mock_server):
     respx.get(f"{mock_server}/resto/api/auth").mock(
         return_value=Response(200, text="token-1"),
     )
-    respx.get(f"{mock_server}/resto/api/products").mock(
-        return_value=_xml_response(PRODUCTS_XML),
+    respx.get(f"{mock_server}/resto/api/v2/entities/products/list").mock(
+        return_value=_json_response(PRODUCTS_JSON),
     )
     respx.get(f"{mock_server}/resto/api/logout").mock(
         return_value=Response(200),
@@ -109,9 +109,12 @@ async def test_get_products_parses_response(client, mock_server):
     assert products[0].name == "Борщ"
     assert products[0].product_type == "dish"
     assert products[0].code == "001"
+    assert products[0].price == 450
+    assert products[0].included_in_menu is True
     assert products[1].name == "Хлеб"
     assert products[1].code == "BRD"
     assert products[1].product_type == "goods"
+    assert products[1].included_in_menu is False
 
 
 @respx.mock
@@ -197,7 +200,7 @@ async def test_products_empty_response_raises_iiko_error(client, mock_server):
     respx.get(f"{mock_server}/resto/api/auth").mock(
         return_value=Response(200, text="tok"),
     )
-    respx.get(f"{mock_server}/resto/api/products").mock(
+    respx.get(f"{mock_server}/resto/api/v2/entities/products/list").mock(
         return_value=Response(200, text=""),
     )
     respx.get(f"{mock_server}/resto/api/logout").mock(
@@ -209,19 +212,39 @@ async def test_products_empty_response_raises_iiko_error(client, mock_server):
 
 
 @respx.mock
-async def test_products_invalid_xml_raises_iiko_error(client, mock_server):
+async def test_products_invalid_json_raises_iiko_error(client, mock_server):
     respx.get(f"{mock_server}/resto/api/auth").mock(
         return_value=Response(200, text="tok"),
     )
-    respx.get(f"{mock_server}/resto/api/products").mock(
-        return_value=Response(200, text="not xml at all {{{"),
+    respx.get(f"{mock_server}/resto/api/v2/entities/products/list").mock(
+        return_value=Response(200, text="not json at all {{{"),
     )
     respx.get(f"{mock_server}/resto/api/logout").mock(
         return_value=Response(200),
     )
 
-    with pytest.raises(IikoApiError, match="invalid XML response"):
+    with pytest.raises(IikoApiError, match="invalid JSON response"):
         await client.get_products()
+
+
+@respx.mock
+async def test_products_excludes_deleted(client, mock_server):
+    products_with_deleted = PRODUCTS_JSON + [
+        {"id": "p3", "name": "Удалено", "type": "DISH", "deleted": True},
+    ]
+    respx.get(f"{mock_server}/resto/api/auth").mock(
+        return_value=Response(200, text="tok"),
+    )
+    respx.get(f"{mock_server}/resto/api/v2/entities/products/list").mock(
+        return_value=_json_response(products_with_deleted),
+    )
+    respx.get(f"{mock_server}/resto/api/logout").mock(
+        return_value=Response(200),
+    )
+
+    products = await client.get_products()
+    assert len(products) == 2
+    assert all(p.name != "Удалено" for p in products)
 
 
 # --- OLAP v2 tests ---
