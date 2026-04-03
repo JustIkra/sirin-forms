@@ -37,6 +37,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS"
             " price FLOAT"
         ))
+        await conn.execute(text(
+            "ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS"
+            " method VARCHAR(10) DEFAULT 'llm'"
+        ))
     app.state.session_factory = create_session_factory(engine)
     app.state.settings = settings
 
