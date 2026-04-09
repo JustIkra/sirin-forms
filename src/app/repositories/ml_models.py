@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.db import MLModelRecord
 from app.repositories.base import BaseRepository
@@ -48,6 +48,11 @@ class MLModelsRepository(BaseRepository[MLModelRecord]):
         stmt = select(MLModelRecord).order_by(MLModelRecord.dish_name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_models(self) -> int:
+        stmt = select(func.count()).select_from(MLModelRecord)
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def delete_models(self, dish_id: str) -> None:
         await self._session.execute(

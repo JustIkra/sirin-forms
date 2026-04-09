@@ -20,7 +20,7 @@ export class ForecastError extends Error {
 export async function fetchForecast(
   date: string,
   force: boolean = false,
-  method: 'llm' | 'ml' = 'llm',
+  method: 'llm' | 'ml' = 'ml',
 ): Promise<DailyForecastResult> {
   const res = await fetch(`${BASE_URL}/api/forecast`, {
     method: 'POST',
@@ -38,7 +38,7 @@ export async function fetchForecast(
 
 export async function fetchPlanFact(
   date: string,
-  method: 'llm' | 'ml' = 'llm',
+  method: 'llm' | 'ml' = 'ml',
 ): Promise<PlanFactResponse | null> {
   const res = await fetch(`${BASE_URL}/api/plan-fact?date=${date}&method=${method}`);
 
@@ -55,7 +55,7 @@ export async function fetchPlanFact(
 
 export async function fetchDiscrepancyAnalysis(
   date: string,
-  method: 'llm' | 'ml' = 'llm',
+  method: 'llm' | 'ml' = 'ml',
 ): Promise<DiscrepancyAnalysisResponse> {
   const res = await fetch(`${BASE_URL}/api/plan-fact/analysis`, {
     method: 'POST',

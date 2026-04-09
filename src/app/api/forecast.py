@@ -41,10 +41,9 @@ from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
 from app.repositories.weather import WeatherRepository
 from app.services.backfill import BackfillService
+from app.services.context_formatter import build_calendar_info, build_sales_data, build_weather_data
 from app.services.data_collector import DataCollector
-from app.services.forecast import ForecastService
 from app.services.ml_forecast import MLForecastService
-from app.services.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,6 @@ router = APIRouter(prefix="/api", tags=["forecast"])
 class ForecastRequest(BaseModel):
     date: datetime.date
     force: bool = False
-    method: str = "llm"
 
 
 @router.post("/forecast", response_model=DailyForecastResult)
@@ -62,7 +60,6 @@ async def create_forecast(
     body: ForecastRequest,
     iiko_client: IikoClient = Depends(get_iiko_client),
     weather_client: WeatherClient = Depends(get_weather_client),
-    openrouter_client: OpenRouterClient = Depends(get_openrouter_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     products_repo: ProductsRepository = Depends(get_products_repo),
     weather_repo: WeatherRepository = Depends(get_weather_repo),
@@ -80,24 +77,14 @@ async def create_forecast(
     )
 
     try:
-        if body.method == "ml":
-            service = MLForecastService(
-                data_collector=collector,
-                forecasts_repo=forecasts_repo,
-                ml_models_repo=ml_models_repo,
-                sales_repo=sales_repo,
-                weather_repo=weather_repo,
-                settings=settings,
-            )
-        else:
-            service = ForecastService(
-                data_collector=collector,
-                prompt_builder=PromptBuilder(),
-                openrouter_client=openrouter_client,
-                forecasts_repo=forecasts_repo,
-                sales_repo=sales_repo,
-                settings=settings,
-            )
+        service = MLForecastService(
+            data_collector=collector,
+            forecasts_repo=forecasts_repo,
+            ml_models_repo=ml_models_repo,
+            sales_repo=sales_repo,
+            weather_repo=weather_repo,
+            settings=settings,
+        )
         return await service.generate_forecast(body.date, force=body.force)
     except ForecastError as exc:
         logger.error("Forecast error: %s", exc)
@@ -120,7 +107,7 @@ def _quality_rating(mape: float) -> str:
 @router.get("/plan-fact", response_model=PlanFactResponse)
 async def get_plan_fact(
     date: datetime.date = Query(...),
-    method: str = Query("llm"),
+    method: str = Query("ml"),
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
@@ -203,7 +190,7 @@ async def get_plan_fact(
 
 class DiscrepancyAnalysisRequest(BaseModel):
     date: datetime.date
-    method: str = "llm"
+    method: str = "ml"
 
 
 @router.post("/plan-fact/analysis", response_model=DiscrepancyAnalysisResponse)
@@ -273,8 +260,6 @@ async def analyze_discrepancies(
     forecast_notes = forecast.notes or "Нет заметок"
 
     # Rebuild context from DB
-    prompt_builder = PromptBuilder()
-
     historical_from = body.date - datetime.timedelta(days=372)
     recent_from = body.date - datetime.timedelta(days=30)
     recent_to = body.date - datetime.timedelta(days=1)
@@ -285,9 +270,9 @@ async def analyze_discrepancies(
     weather_list = await weather_repo.get_weather_range(body.date, body.date)
     weather = weather_list[0] if weather_list else None
 
-    sales_data = prompt_builder.build_sales_data(historical_sales, recent_sales, body.date)
-    weather_data = prompt_builder.build_weather_data(weather)
-    calendar_info = prompt_builder.build_calendar_info(body.date)
+    sales_data = build_sales_data(historical_sales, recent_sales, body.date)
+    weather_data = build_weather_data(weather)
+    calendar_info = build_calendar_info(body.date)
 
     result = await openrouter_client.generate_discrepancy_analysis(
         plan_fact_details=plan_fact_details,

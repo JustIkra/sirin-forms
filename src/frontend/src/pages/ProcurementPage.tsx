@@ -12,7 +12,6 @@ function todayMSK(): string {
 
 export default function ProcurementPage() {
   const [date, setDate] = useState(todayMSK);
-  const [method, setMethod] = useState<'llm' | 'ml'>('ml');
   const [data, setData] = useState<ProcurementList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
@@ -22,7 +21,7 @@ export default function ProcurementPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchProcurement(date, method);
+      const result = await fetchProcurement(date, 'ml');
       setData(result);
     } catch (err) {
       if (err instanceof ForecastError) {
@@ -58,36 +57,6 @@ export default function ProcurementPage() {
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-300">
-            Метод
-          </label>
-          <div className="inline-flex rounded-md border border-white/10">
-            <button
-              type="button"
-              onClick={() => setMethod('llm')}
-              className={`px-4 py-2 text-sm font-medium rounded-l-md transition-colors ${
-                method === 'llm'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
-              }`}
-            >
-              ИИ-прогноз
-            </button>
-            <button
-              type="button"
-              onClick={() => setMethod('ml')}
-              className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-white/10 transition-colors ${
-                method === 'ml'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
-              }`}
-            >
-              ML-прогноз
-            </button>
-          </div>
-        </div>
-
         <button
           type="submit"
           disabled={loading}
@@ -107,7 +76,7 @@ export default function ProcurementPage() {
             <p className="text-sm text-slate-400">
               Период: {data.date_from} — {data.date_to} | Позиций: {data.items.length}
             </p>
-            <ExportButtons date={date} method={method} type="procurement" />
+            <ExportButtons date={date} method="ml" type="procurement" />
           </div>
           <ProcurementTable items={data.items} />
         </div>

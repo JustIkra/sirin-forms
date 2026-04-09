@@ -42,7 +42,7 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         return records
 
     async def get_forecast(
-        self, date: datetime.date, method: str = "llm",
+        self, date: datetime.date, method: str = "ml",
     ) -> DailyForecastResult | None:
         stmt = select(ForecastRecord).where(
             ForecastRecord.date == date,
@@ -89,7 +89,7 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         date_from: datetime.date,
         date_to: datetime.date,
         actual_sales: list[dict],
-        method: str = "llm",
+        method: str = "ml",
     ) -> list[PlanFactRecord]:
         stmt = (
             select(ForecastRecord)

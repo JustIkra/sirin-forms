@@ -38,10 +38,12 @@ class DataCollector:
         self._weather_repo = weather_repo
         self._history_months = settings.history_months
 
+    _FORECAST_PRODUCT_TYPES = {ProductType.DISH, ProductType.GOODS, ProductType.PREPARED}
+
     async def collect_products(self) -> list[IikoProduct]:
         products = await self._iiko.get_products()
         await self._products_repo.sync_products(products)
-        return [p for p in products if p.product_type == ProductType.DISH]
+        return [p for p in products if p.product_type in self._FORECAST_PRODUCT_TYPES]
 
     async def collect_historical_sales(
         self,

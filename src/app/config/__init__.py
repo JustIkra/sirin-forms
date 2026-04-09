@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     procurement_buffer_pct: float = 0.10
     forecast_horizon_days: int = 30
     history_months: int = 24
+    min_sales_pct: float = 0.15
 
     # Database
     database_url: str = "postgresql+asyncpg://user:password@localhost:5432/gurman"

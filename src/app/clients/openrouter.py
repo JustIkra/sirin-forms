@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import TypeVar
 
@@ -8,11 +7,7 @@ from pydantic import BaseModel, ValidationError
 from app.config.prompt_loader import load_prompt
 from app.exceptions import OpenRouterApiError
 from app.models.common import ChatMessage
-from app.models.forecast import (
-    BusinessRecommendation,
-    DailyForecastResult,
-    DiscrepancyAnalysisResponse,
-)
+from app.models.forecast import DiscrepancyAnalysisResponse
 
 logger = logging.getLogger(__name__)
 
@@ -110,54 +105,6 @@ class OpenRouterClient:
         if stripped.endswith("```"):
             stripped = stripped[:-3]
         return stripped.strip()
-
-    async def generate_daily_forecast(
-        self,
-        sales_data: str,
-        weather_data: str,
-        calendar_info: str,
-        menu_info: str,
-        retrospective: str = "",
-    ) -> DailyForecastResult:
-        cfg = load_prompt("forecast")
-        messages = [
-            ChatMessage(role="system", content=cfg.system_prompt),
-            ChatMessage(
-                role="user",
-                content=cfg.user_template.format(
-                    sales_data=sales_data,
-                    weather_data=weather_data,
-                    calendar_info=calendar_info,
-                    menu_info=menu_info,
-                    retrospective=retrospective,
-                ),
-            ),
-        ]
-        return await self.complete_structured(
-            messages, DailyForecastResult,
-            temperature=cfg.temperature, max_tokens=cfg.max_tokens,
-        )
-
-    async def generate_recommendations(
-        self,
-        trends: str,
-        plan_fact: str,
-    ) -> list[BusinessRecommendation]:
-        cfg = load_prompt("recommendations")
-        messages = [
-            ChatMessage(role="system", content=cfg.system_prompt),
-            ChatMessage(
-                role="user",
-                content=cfg.user_template.format(trends=trends, plan_fact=plan_fact),
-            ),
-        ]
-        raw = await self.complete(
-            messages, temperature=cfg.temperature, max_tokens=cfg.max_tokens,
-            response_format={"type": "json_object"},
-        )
-        raw = self._strip_markdown_fences(raw)
-        items = json.loads(raw)
-        return [BusinessRecommendation.model_validate(item) for item in items]
 
     async def generate_discrepancy_analysis(
         self,

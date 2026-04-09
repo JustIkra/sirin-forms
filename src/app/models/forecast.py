@@ -18,7 +18,7 @@ class DailyForecastResult(BaseModel):
     weather: str | None = None
     is_holiday: bool = False
     notes: str | None = None
-    method: str = "llm"
+    method: str = "ml"
 
 
 class IngredientNeed(BaseModel):
@@ -88,14 +88,6 @@ class DiscrepancyAnalysisResponse(BaseModel):
     dish_insights: list[DishDiscrepancyInsight]
     recommendations: list[DiscrepancyRecommendation]
     accuracy_context: str
-
-
-class BusinessRecommendation(BaseModel):
-    category: str
-    title: str
-    description: str
-    priority: int
-    based_on: list[str] = []
 
 
 # --- Accuracy History ---

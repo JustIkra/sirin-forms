@@ -1,10 +1,8 @@
 import { useState } from 'react';
 
 interface Props {
-  onSubmit: (date: string, force: boolean, method: 'llm' | 'ml') => void;
+  onSubmit: (date: string, force: boolean) => void;
   loading: boolean;
-  method: 'llm' | 'ml';
-  onMethodChange: (method: 'llm' | 'ml') => void;
 }
 
 function todayMSK(): string {
@@ -12,13 +10,13 @@ function todayMSK(): string {
     .toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
 }
 
-export default function ForecastForm({ onSubmit, loading, method, onMethodChange }: Props) {
+export default function ForecastForm({ onSubmit, loading }: Props) {
   const [date, setDate] = useState(todayMSK);
   const [force, setForce] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(date, force, method);
+    onSubmit(date, force);
   };
 
   return (
@@ -33,36 +31,6 @@ export default function ForecastForm({ onSubmit, loading, method, onMethodChange
           onChange={(e) => setDate(e.target.value)}
           className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
         />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-300">
-          Метод
-        </label>
-        <div className="inline-flex rounded-md border border-white/10">
-          <button
-            type="button"
-            onClick={() => onMethodChange('llm')}
-            className={`px-4 py-2 text-sm font-medium rounded-l-md transition-colors ${
-              method === 'llm'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
-            }`}
-          >
-            ИИ-прогноз
-          </button>
-          <button
-            type="button"
-            onClick={() => onMethodChange('ml')}
-            className={`px-4 py-2 text-sm font-medium rounded-r-md border-l border-white/10 transition-colors ${
-              method === 'ml'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-white/5 text-slate-400 hover:bg-white/[0.08]'
-            }`}
-          >
-            ML-прогноз
-          </button>
-        </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-slate-300">

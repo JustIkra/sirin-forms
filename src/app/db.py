@@ -82,7 +82,7 @@ class ForecastRecord(Base):
     weather: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_holiday: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    method: Mapped[str] = mapped_column(String(10), default="llm")
+    method: Mapped[str] = mapped_column(String(10), default="ml")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(tz=MSK),

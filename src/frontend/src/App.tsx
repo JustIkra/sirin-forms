@@ -17,7 +17,6 @@ export default function App() {
   const [result, setResult] = useState<DailyForecastResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
-  const [method, setMethod] = useState<'llm' | 'ml'>('llm');
   const [planFact, setPlanFact] = useState<PlanFactResponse | null>(null);
   const [planFactLoading, setPlanFactLoading] = useState(false);
 
@@ -33,18 +32,18 @@ export default function App() {
     }
     let cancelled = false;
     setPlanFactLoading(true);
-    fetchPlanFact(result.date, result.method)
+    fetchPlanFact(result.date, result.method as 'llm' | 'ml')
       .then((data) => { if (!cancelled) setPlanFact(data); })
       .catch(() => { if (!cancelled) setPlanFact(null); })
       .finally(() => { if (!cancelled) setPlanFactLoading(false); });
     return () => { cancelled = true; };
   }, [result]);
 
-  const handleSubmit = async (date: string, force: boolean, m: 'llm' | 'ml') => {
+  const handleSubmit = async (date: string, force: boolean) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchForecast(date, force, m);
+      const data = await fetchForecast(date, force, 'ml');
       setResult(data);
     } catch (err) {
       if (err instanceof ForecastError) {
@@ -72,8 +71,6 @@ export default function App() {
           <ForecastForm
             onSubmit={handleSubmit}
             loading={loading}
-            method={method}
-            onMethodChange={setMethod}
           />
 
           {loading && <Spinner />}

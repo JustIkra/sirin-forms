@@ -1,6 +1,7 @@
 import datetime
 import io
 import logging
+import statistics
 from collections import defaultdict
 
 import joblib
@@ -26,7 +27,57 @@ from app.utils.calendar import get_calendar_context
 
 logger = logging.getLogger(__name__)
 
-MIN_SAMPLES = 30  # Minimum non-zero sales days to train a model
+MIN_SAMPLES = 7  # Minimum non-zero sales days to train a model
+
+_NON_DISH_PREFIXES = ("+", "-", "Заказ ")
+_NON_DISH_KEYWORDS = ("комплимент", "замена чаши", "на чаше", "подарок", "персонал")
+
+
+def _is_non_dish(name: str) -> bool:
+    """Return True for modifiers and internal items."""
+    stripped = name.strip()
+    if any(stripped.startswith(p) for p in _NON_DISH_PREFIXES):
+        return True
+    if any(kw in stripped.lower() for kw in _NON_DISH_KEYWORDS):
+        return True
+    return False
+
+
+_WEATHER_RU: dict[str, str] = {
+    "Clear": "ясно",
+    "Clouds": "облачно",
+    "Rain": "дождь",
+    "Drizzle": "морось",
+    "Thunderstorm": "гроза",
+    "Snow": "снег",
+    "Mist": "дымка",
+    "Fog": "туман",
+    "Haze": "мгла",
+    "Smoke": "смог",
+    "Dust": "пыль",
+    "Sand": "песчаная буря",
+    "Ash": "пепел",
+    "Squall": "шквал",
+    "Tornado": "торнадо",
+}
+
+
+def _format_weather(weather: DailyWeather | None) -> str | None:
+    if weather is None:
+        return None
+    raw = weather.weather_description or weather.weather_main
+    desc = _WEATHER_RU.get(raw, raw)
+    parts = [
+        f"{weather.temp_min:.0f}–{weather.temp_max:.0f}°C",
+        desc,
+    ]
+    if weather.precipitation > 0:
+        parts.append(f"осадки {weather.precipitation:.1f} мм")
+    if weather.humidity is not None:
+        parts.append(f"влажность {weather.humidity}%")
+    if weather.wind_speed is not None:
+        parts.append(f"ветер {weather.wind_speed:.1f} м/с")
+    return ", ".join(parts)
 
 
 class MLForecastService:
@@ -68,14 +119,15 @@ class MLForecastService:
 
         # Filter to active dishes with recent sales
         dish_volume: dict[str, float] = defaultdict(float)
+        dish_days: dict[str, set] = defaultdict(set)
         dish_ids_by_name: dict[str, str] = {}
         for s in recent:
             key = s.dish_name.strip().lower()
             dish_volume[key] += s.quantity
+            dish_days[key].add(s.date)
             dish_ids_by_name[key] = s.dish_id
 
-        from app.services.forecast import ForecastService
-        active_dishes = [d for d in dishes if not ForecastService._is_non_dish(d.name)]
+        active_dishes = [d for d in dishes if not _is_non_dish(d.name)]
         sold_names = set(dish_volume.keys())
         active_dishes = [d for d in active_dishes if d.name.strip().lower() in sold_names]
 
@@ -86,15 +138,39 @@ class MLForecastService:
             if key not in seen:
                 seen[key] = d
         active_dishes = list(seen.values())
+        active_dishes = [d for d in active_dishes if d.price and d.price > 0]
+
+        # Dynamic threshold: exclude items below min_sales_pct of median monthly sales
+        all_totals = [dish_volume.get(d.name.strip().lower(), 0) for d in active_dishes]
+        if all_totals:
+            median_sales = statistics.median(all_totals)
+            sales_threshold = median_sales * self._settings.min_sales_pct
+            active_dishes = [
+                d for d in active_dishes
+                if dish_volume.get(d.name.strip().lower(), 0) >= sales_threshold
+            ]
+
         active_dishes.sort(key=lambda d: dish_volume.get(d.name.strip().lower(), 0), reverse=True)
-        active_dishes = active_dishes[:50]
+        logger.info("ML menu: %d catalog → %d active (with sales, price, threshold)", len(dishes), len(active_dishes))
+
+        # Auto-train if no models exist
+        models_count = await self._ml_models_repo.count_models()
+        if models_count == 0:
+            logger.warning("No trained ML models found, triggering training...")
+            await self.train_models()
+
+        # Fetch total daily sales for restaurant traffic feature
+        _totals_from = target_date - datetime.timedelta(days=90)
+        _totals_to = target_date - datetime.timedelta(days=1)
+        _totals_rows = await self._sales_repo.get_daily_totals(_totals_from, _totals_to)
+        total_daily_sales = {r.date: r.total_quantity for r in _totals_rows}
 
         # 3. Per-dish: load model → predict (or fallback)
         forecasts: list[DishForecast] = []
         for dish in active_dishes:
             model_record = await self._ml_models_repo.get_latest_model(dish.id)
             qty = await self._predict_dish(
-                dish.id, dish.name, target_date, weather, model_record,
+                dish.id, dish.name, target_date, weather, model_record, total_daily_sales,
             )
             forecasts.append(DishForecast(
                 dish_id=dish.id,
@@ -102,7 +178,18 @@ class MLForecastService:
                 predicted_quantity=max(0.0, round(qty)),
                 confidence=0.7 if model_record else 0.4,
                 key_factors=["ML-модель (HistGBR)" if model_record else "Среднее за 4 недели (fallback)"],
+                price=dish.price,
             ))
+
+        # Post-filter: cap extreme outlier predictions
+        for f in forecasts:
+            key = f.dish_name.strip().lower()
+            days_sold = len(dish_days.get(key, set()))
+            if days_sold > 0:
+                avg_daily_when_sold = dish_volume.get(key, 0) / days_sold
+                cap = avg_daily_when_sold * 3
+                if f.predicted_quantity > cap:
+                    f.predicted_quantity = round(cap)
 
         # Bias calibration from backfilled forecasts
         if _backfill:
@@ -112,7 +199,7 @@ class MLForecastService:
                 for dish_forecast in forecasts:
                     key = dish_forecast.dish_name.strip().lower()
                     if key in bias:
-                        correction = max(0.5, min(1.5, 1 - bias[key]))
+                        correction = max(0.3, min(3.0, 1 - bias[key]))
                         old_qty = dish_forecast.predicted_quantity
                         dish_forecast.predicted_quantity = max(0.0, round(old_qty * correction))
                         logger.debug(
@@ -121,7 +208,7 @@ class MLForecastService:
                         )
 
         cal = get_calendar_context(target_date)
-        weather_str = ForecastService._format_weather(weather)
+        weather_str = _format_weather(weather)
 
         result = DailyForecastResult(
             date=target_date,
@@ -144,8 +231,9 @@ class MLForecastService:
         target_date: datetime.date,
         weather: DailyWeather | None,
         model_record,
+        total_daily_sales: dict[datetime.date, float] | None = None,
     ) -> float:
-        date_from = target_date - datetime.timedelta(days=30)
+        date_from = target_date - datetime.timedelta(days=90)
         date_to = target_date - datetime.timedelta(days=1)
 
         # Sales by ID — matches what model was trained on
@@ -154,13 +242,18 @@ class MLForecastService:
         by_name = await self._sales_repo.get_sales_by_dish_name(dish_name, date_from, date_to)
 
         # Fallback uses name-based sales (more complete)
-        fallback = self._same_weekday_average(by_name or by_id, target_date)
+        fallback = self._cascading_fallback(by_name or by_id, target_date)
+
+        # Skip models with stale feature sets
+        if model_record is not None and model_record.feature_names != FEATURE_NAMES:
+            logger.info("Model for %s has stale features, skipping", dish_name)
+            model_record = None
 
         if model_record is not None:
             try:
                 model = joblib.load(io.BytesIO(model_record.model_blob))
                 # Model prediction uses ID-based sales (consistent with training)
-                features = build_prediction_features(target_date, by_id, weather)
+                features = build_prediction_features(target_date, by_id, weather, total_daily_sales)
                 prediction = float(model.predict(features)[0])
                 # If model predicts ~0 but fallback shows sales, use fallback
                 if prediction < 0.5 and fallback > 0:
@@ -226,16 +319,27 @@ class MLForecastService:
         }
 
     @staticmethod
-    def _same_weekday_average(sales: list[SaleRecord], target_date: datetime.date) -> float:
+    def _cascading_fallback(sales: list[SaleRecord], target_date: datetime.date) -> float:
         daily: dict[datetime.date, float] = {}
         for s in sales:
             daily[s.date] = daily.get(s.date, 0) + s.quantity
+
+        # Level 1: same weekday average (last 4 weeks)
         same_wd = []
         for week in range(1, 5):
             d = target_date - datetime.timedelta(weeks=week)
             if d in daily:
                 same_wd.append(daily[d])
-        return float(np.mean(same_wd)) if same_wd else 0.0
+        if same_wd:
+            return float(np.mean(same_wd))
+
+        # Level 2: median of all days with sales in last 30 days
+        cutoff = target_date - datetime.timedelta(days=30)
+        recent = {d: q for d, q in daily.items() if d >= cutoff}
+        if recent:
+            return float(np.median(list(recent.values())))
+
+        return 0.0
 
     async def train_models(self, *, force: bool = False) -> dict:
         """Train ML models for all active dishes."""
@@ -247,6 +351,10 @@ class MLForecastService:
         # Get weather data for the same period
         weather_records = await self._weather_repo.get_weather_range(date_from, date_to)
         weather_by_date: dict[datetime.date, DailyWeather] = {w.date: w for w in weather_records}
+
+        # Get total daily sales for restaurant traffic feature
+        daily_totals_rows = await self._sales_repo.get_daily_totals(date_from, date_to)
+        total_daily_sales = {r.date: r.total_quantity for r in daily_totals_rows}
 
         # Group sales by dish
         sales_by_dish: dict[str, list[SaleRecord]] = defaultdict(list)
@@ -273,12 +381,16 @@ class MLForecastService:
 
             if not force:
                 existing = await self._ml_models_repo.get_latest_model(dish_id)
-                if existing and existing.samples_count >= nonzero_days:
+                if (
+                    existing
+                    and existing.samples_count >= nonzero_days
+                    and existing.feature_names == FEATURE_NAMES
+                ):
                     skipped += 1
                     continue
 
             try:
-                df = build_features_dataframe(dish_sales, weather_by_date)
+                df = build_features_dataframe(dish_sales, weather_by_date, total_daily_sales)
                 X = df[FEATURE_NAMES].values
                 y = df["target"].values
 
@@ -292,9 +404,10 @@ class MLForecastService:
                 X_test, y_test = X[train_end:], y[train_end:]
 
                 model = HistGradientBoostingRegressor(
-                    max_iter=200,
-                    max_depth=6,
-                    learning_rate=0.1,
+                    loss="poisson",
+                    max_iter=300,
+                    max_depth=5,
+                    learning_rate=0.05,
                     min_samples_leaf=5,
                     categorical_features=CATEGORICAL_FEATURES,
                 )
