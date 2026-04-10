@@ -35,17 +35,32 @@ export default function ExportButtons({ date, method, type }: Props) {
         ignoreElements: (el: Element) => el.classList.contains('no-print'),
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
       const pageW = pdf.internal.pageSize.getWidth() - 20;
       const pageH = pdf.internal.pageSize.getHeight() - 20;
-      const imgH = (canvas.height * pageW) / canvas.width;
 
-      let offset = 0;
-      while (offset < imgH) {
-        if (offset > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 10, 10 - offset, pageW, imgH);
-        offset += pageH;
+      // Ratio: mm per canvas pixel
+      const ratio = pageW / canvas.width;
+      // How many canvas pixels fit in one page height
+      const sliceHeight = Math.floor(pageH / ratio);
+
+      let y = 0;
+      let pageNum = 0;
+      while (y < canvas.height) {
+        const h = Math.min(sliceHeight, canvas.height - y);
+        // Slice canvas into a page-sized chunk
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = h;
+        const ctx = pageCanvas.getContext('2d')!;
+        ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+
+        const pageImg = pageCanvas.toDataURL('image/jpeg', 0.95);
+        if (pageNum > 0) pdf.addPage();
+        pdf.addImage(pageImg, 'JPEG', 10, 10, pageW, h * ratio);
+
+        y += h;
+        pageNum++;
       }
 
       pdf.save(`${type}_${date}_${method}.pdf`);

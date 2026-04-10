@@ -104,13 +104,11 @@ class AccuracyDayRecord(BaseModel):
     is_holiday: bool
     holiday_name: str | None = None
     ml: MethodAccuracy | None = None
-    llm: MethodAccuracy | None = None
     actual_total: float
 
 
 class AccuracyHistorySummary(BaseModel):
     ml_avg_accuracy: float
-    llm_avg_accuracy: float
     days_count: int
 
 

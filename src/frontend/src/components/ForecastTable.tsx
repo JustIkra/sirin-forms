@@ -136,7 +136,7 @@ export default function ForecastTable({ forecasts, planFact }: Props) {
                       {pf ? pf.actual_quantity : '\u2014'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums text-slate-300">
-                      {pf && pf.actual_revenue > 0
+                      {pf
                         ? `${formatRub(pf.actual_revenue)} \u20BD`
                         : '\u2014'}
                     </td>

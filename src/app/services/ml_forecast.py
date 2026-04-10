@@ -7,6 +7,7 @@ from collections import defaultdict
 import joblib
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.model_selection import TimeSeriesSplit
 
 from app.config import Settings
 from app.models.forecast import DailyForecastResult, DishForecast
@@ -267,11 +268,11 @@ class MLForecastService:
         return fallback
 
     async def _backfill_and_get_bias(self, target_date: datetime.date) -> dict[str, float]:
-        """Backfill missing ML forecasts for X-7..X-1, then compute per-dish bias."""
+        """Backfill missing ML forecasts for X-14..X-1, compute per-dish bias with exponential decay."""
         today = datetime.date.today()
         dates = [
             target_date - datetime.timedelta(days=i)
-            for i in range(1, 8)
+            for i in range(1, 15)
             if (target_date - datetime.timedelta(days=i)) <= today
         ]
 
@@ -285,8 +286,8 @@ class MLForecastService:
                 except Exception:
                     logger.warning("ML backfill failed for %s, skipping", d, exc_info=True)
 
-        # Collect plan-fact for all backfilled dates
-        all_records = []
+        # Collect plan-fact for all backfilled dates with day offsets
+        dated_records: list[tuple[int, object]] = []  # (days_ago, record)
         for d in dates:
             forecast = await self._forecasts_repo.get_forecast(d, method="ml")
             if forecast is None:
@@ -299,24 +300,30 @@ class MLForecastService:
                 for s in sales
             ]
             records = await self._forecasts_repo.get_plan_fact(d, d, actual_sales, method="ml")
-            all_records.extend(records)
+            days_ago = (target_date - d).days
+            for r in records:
+                dated_records.append((days_ago, r))
 
-        if not all_records:
+        if not dated_records:
             return {}
 
-        # Compute per-dish mean signed error: (predicted - actual) / max(predicted, actual)
-        dish_errors: dict[str, list[float]] = defaultdict(list)
-        for r in all_records:
+        # Compute per-dish weighted signed error with exponential decay (half-life = 5 days)
+        half_life = 5.0
+        dish_errors: dict[str, list[tuple[float, float]]] = defaultdict(list)  # name -> [(weight, error)]
+        for days_ago, r in dated_records:
             denom = max(r.predicted_quantity, r.actual_quantity)
             if denom > 0:
                 error = (r.predicted_quantity - r.actual_quantity) / denom
-                dish_errors[r.dish_name.strip().lower()].append(error)
+                weight = np.exp(-np.log(2) * days_ago / half_life)
+                dish_errors[r.dish_name.strip().lower()].append((weight, error))
 
-        return {
-            name: sum(errors) / len(errors)
-            for name, errors in dish_errors.items()
-            if len(errors) >= 2  # require at least 2 data points
-        }
+        result = {}
+        for name, weighted_errors in dish_errors.items():
+            if len(weighted_errors) >= 2:
+                total_weight = sum(w for w, _ in weighted_errors)
+                weighted_mean = sum(w * e for w, e in weighted_errors) / total_weight
+                result[name] = weighted_mean
+        return result
 
     @staticmethod
     def _cascading_fallback(sales: list[SaleRecord], target_date: datetime.date) -> float:
@@ -394,15 +401,6 @@ class MLForecastService:
                 X = df[FEATURE_NAMES].values
                 y = df["target"].values
 
-                # Temporal split: last 30 days for validation, rest for training
-                test_size = min(30, len(y) // 5)  # at least 80% train
-                if test_size < 7:
-                    test_size = 0  # not enough data for meaningful validation
-                train_end = len(y) - test_size if test_size > 0 else len(y)
-
-                X_train, y_train = X[:train_end], y[:train_end]
-                X_test, y_test = X[train_end:], y[train_end:]
-
                 model = HistGradientBoostingRegressor(
                     loss="poisson",
                     max_iter=300,
@@ -411,20 +409,34 @@ class MLForecastService:
                     min_samples_leaf=5,
                     categorical_features=CATEGORICAL_FEATURES,
                 )
-                model.fit(X_train, y_train)
 
-                # Validation metrics on held-out temporal test set
-                if test_size > 0:
-                    y_pred_test = model.predict(X_test)
-                    mae_test = float(np.mean(np.abs(y_test - y_pred_test)))
-                    # MAPE-style accuracy: 1 - mean(|actual-pred| / max(actual,pred))
-                    denom = np.maximum(y_test, y_pred_test)
-                    denom = np.where(denom == 0, 1.0, denom)
-                    accuracy = float((1 - np.mean(np.abs(y_test - y_pred_test) / denom)) * 100)
+                # TimeSeriesSplit cross-validation for reliable metrics
+                n_splits = min(5, max(2, len(y) // 30))
+                test_size = 0
+                if len(y) >= 60:
+                    tscv = TimeSeriesSplit(n_splits=n_splits)
+                    mae_scores = []
+                    acc_scores = []
+                    for train_idx, test_idx in tscv.split(X):
+                        model.fit(X[train_idx], y[train_idx])
+                        y_pred_fold = model.predict(X[test_idx])
+                        mae_scores.append(float(np.mean(np.abs(y[test_idx] - y_pred_fold))))
+                        denom = np.maximum(y[test_idx], y_pred_fold)
+                        denom = np.where(denom == 0, 1.0, denom)
+                        acc_scores.append(float((1 - np.mean(np.abs(y[test_idx] - y_pred_fold) / denom)) * 100))
+                    mae_test = float(np.mean(mae_scores))
+                    accuracy = float(np.mean(acc_scores))
+                    test_size = len(y) // (n_splits + 1)
                 else:
-                    y_pred_train = model.predict(X_train)
-                    mae_test = float(np.mean(np.abs(y_train - y_pred_train)))
-                    accuracy = 0.0  # unknown without test set
+                    # Not enough data for CV — use last 20% as holdout
+                    test_size = max(7, len(y) // 5)
+                    train_end = len(y) - test_size
+                    model.fit(X[:train_end], y[:train_end])
+                    y_pred_test = model.predict(X[train_end:])
+                    mae_test = float(np.mean(np.abs(y[train_end:] - y_pred_test)))
+                    denom = np.maximum(y[train_end:], y_pred_test)
+                    denom = np.where(denom == 0, 1.0, denom)
+                    accuracy = float((1 - np.mean(np.abs(y[train_end:] - y_pred_test) / denom)) * 100)
 
                 # Retrain on full data for production model
                 model.fit(X, y)

@@ -321,25 +321,20 @@ async def get_accuracy_history(
 
         cal = get_calendar_context(d)
         ml_acc = None
-        llm_acc = None
 
-        for method in methods:
-            pf_records = await forecasts_repo.get_plan_fact(d, d, actual_sales, method=method)
+        if "ml" in methods:
+            pf_records = await forecasts_repo.get_plan_fact(d, d, actual_sales, method="ml")
             deviations = [
                 abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
                 for r in pf_records if r.actual_quantity > 0
             ]
             mape = (sum(deviations) / len(deviations) * 100) if deviations else 0.0
             accuracy = max(0.0, 100.0 - mape)
-            ma = MethodAccuracy(
+            ml_acc = MethodAccuracy(
                 accuracy=round(accuracy, 1),
                 mape=round(mape, 1),
                 dish_count=len(pf_records),
             )
-            if method == "ml":
-                ml_acc = ma
-            else:
-                llm_acc = ma
 
         records.append(AccuracyDayRecord(
             date=d,
@@ -347,15 +342,12 @@ async def get_accuracy_history(
             is_holiday=cal["is_holiday"],
             holiday_name=cal.get("holiday_name"),
             ml=ml_acc,
-            llm=llm_acc,
             actual_total=round(actual_total, 1),
         ))
 
     ml_accs = [r.ml.accuracy for r in records if r.ml]
-    llm_accs = [r.llm.accuracy for r in records if r.llm]
     summary = AccuracyHistorySummary(
         ml_avg_accuracy=round(sum(ml_accs) / len(ml_accs), 1) if ml_accs else 0.0,
-        llm_avg_accuracy=round(sum(llm_accs) / len(llm_accs), 1) if llm_accs else 0.0,
         days_count=len(records),
     )
 

@@ -65,6 +65,7 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
                     price=r.price,
                 )
                 for r in rows
+                if r.price and r.price > 0
             ],
             weather=rows[0].weather,
             is_holiday=rows[0].is_holiday,

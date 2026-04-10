@@ -8,29 +8,56 @@ from app.models.weather import DailyWeather
 from app.utils.calendar import get_calendar_context
 
 FEATURE_NAMES = [
-    "day_of_week",     # 0-6 (categorical)
-    "month",           # 1-12 (categorical)
-    "week_of_year",    # 1-53
-    "is_weekend",      # 0/1 (categorical)
-    "is_holiday",      # 0/1 (categorical)
-    "is_pre_holiday",  # 0/1 (categorical)
-    "is_day_off",      # 0/1 (categorical) — weekend OR holiday OR transfer
-    "temp_avg",        # float
-    "precipitation",   # float
-    "humidity",        # float
-    "wind_speed",      # float
-    "rolling_avg_7d",  # float
-    "rolling_avg_30d", # float
-    "same_weekday_avg_4w",  # float
-    "day_of_month",    # 1-31
-    "is_payday_period",  # 0/1 (categorical) — days 25-31 and 1-5
-    "trend_7d",        # float — slope of sales over last 7 days
-    "days_since_last_sale",  # int — days since last non-zero sale, capped at 30
-    "total_restaurant_sales_7d_avg",  # float — average total restaurant traffic over 7 days
+    "day_of_week",     # 0  (categorical)
+    "month",           # 1  (categorical)
+    "week_of_year",    # 2
+    "is_weekend",      # 3  (categorical)
+    "is_holiday",      # 4  (categorical)
+    "is_pre_holiday",  # 5  (categorical)
+    "is_day_off",      # 6  (categorical) — weekend OR holiday OR transfer
+    "temp_avg",        # 7
+    "precipitation",   # 8
+    "humidity",        # 9
+    "wind_speed",      # 10
+    "rolling_avg_7d",  # 11
+    "rolling_avg_30d", # 12
+    "same_weekday_avg_4w",  # 13
+    "day_of_month",    # 14
+    "is_payday_period",  # 15 (categorical) — days 25-31 and 1-5
+    "trend_7d",        # 16 — slope of sales over last 7 days
+    "days_since_last_sale",  # 17 — capped at 30
+    "total_restaurant_sales_7d_avg",  # 18
+    # --- new features ---
+    "lag_1d",          # 19 — sales yesterday
+    "lag_7d",          # 20 — sales 7 days ago
+    "lag_14d",         # 21 — sales 14 days ago
+    "rolling_std_7d",  # 22 — volatility over last 7 days
+    "cv_30d",          # 23 — coefficient of variation over 30 days
+    "sin_day_of_year", # 24 — yearly seasonality (sin)
+    "cos_day_of_year", # 25 — yearly seasonality (cos)
+    "sin_day_of_week", # 26 — weekly seasonality (sin)
+    "cos_day_of_week", # 27 — weekly seasonality (cos)
+    "weather_category",  # 28 (categorical) — 0=clear,1=clouds,2=rain,3=snow,4=other
+    "temp_x_weekend",    # 29 — interaction: temp_avg * is_weekend
+    "precip_x_weekend",  # 30 — interaction: precipitation * is_weekend
 ]
 
-# day_of_week, month, is_weekend, is_holiday, is_pre_holiday, is_day_off, is_payday_period
-CATEGORICAL_FEATURES = [0, 1, 3, 4, 5, 6, 15]
+# day_of_week, month, is_weekend, is_holiday, is_pre_holiday, is_day_off, is_payday_period, weather_category
+CATEGORICAL_FEATURES = [0, 1, 3, 4, 5, 6, 15, 28]
+
+_WEATHER_CATEGORY_MAP = {
+    "Clear": 0, "Clouds": 1, "Rain": 2, "Drizzle": 2,
+    "Thunderstorm": 2, "Snow": 3, "Mist": 4, "Fog": 4,
+    "Haze": 4, "Smoke": 4, "Dust": 4, "Sand": 4,
+    "Ash": 4, "Squall": 4, "Tornado": 4,
+}
+
+
+def _weather_cat(w) -> float:
+    if w is None:
+        return np.nan
+    key = w.weather_main or w.weather_description or ""
+    return float(_WEATHER_CATEGORY_MAP.get(key, 4))
 
 
 def build_features_dataframe(
@@ -96,26 +123,62 @@ def build_features_dataframe(
             if total_vals:
                 total_7d_avg = float(np.mean(total_vals))
 
+        # Lag features (strictly past)
+        lag_1d = qty_series.iloc[i - 1] if i >= 1 else np.nan
+        lag_7d = qty_series.iloc[i - 7] if i >= 7 else np.nan
+        lag_14d = qty_series.iloc[i - 14] if i >= 14 else np.nan
+
+        # Volatility
+        rolling_std = float(past_7.std()) if len(past_7) >= 2 else np.nan
+        mean_30 = past_30.mean() if len(past_30) > 0 else np.nan
+        std_30 = float(past_30.std()) if len(past_30) >= 2 else np.nan
+        cv_30d = (std_30 / mean_30) if mean_30 and mean_30 > 0 and not np.isnan(std_30) else np.nan
+
+        # Cyclic seasonality
+        doy = d.timetuple().tm_yday
+        sin_doy = np.sin(2 * np.pi * doy / 365.25)
+        cos_doy = np.cos(2 * np.pi * doy / 365.25)
+        sin_dow = np.sin(2 * np.pi * d.weekday() / 7)
+        cos_dow = np.cos(2 * np.pi * d.weekday() / 7)
+
+        # Weather category & interactions
+        w_cat = _weather_cat(w)
+        is_we = 1 if cal["is_weekend"] else 0
+        temp = w.temp_avg if w else np.nan
+        precip = w.precipitation if w else np.nan
+
         rows.append({
             "day_of_week": d.weekday(),
             "month": d.month,
             "week_of_year": d.isocalendar()[1],
-            "is_weekend": 1 if cal["is_weekend"] else 0,
+            "is_weekend": is_we,
             "is_holiday": 1 if cal["is_holiday"] else 0,
             "is_pre_holiday": 1 if cal["is_pre_holiday"] else 0,
             "is_day_off": 1 if cal.get("is_day_off", cal["is_weekend"] or cal["is_holiday"]) else 0,
-            "temp_avg": w.temp_avg if w else np.nan,
-            "precipitation": w.precipitation if w else np.nan,
+            "temp_avg": temp,
+            "precipitation": precip,
             "humidity": float(w.humidity) if w and w.humidity is not None else np.nan,
             "wind_speed": w.wind_speed if w and w.wind_speed is not None else np.nan,
             "rolling_avg_7d": past_7.mean() if len(past_7) > 0 else np.nan,
-            "rolling_avg_30d": past_30.mean() if len(past_30) > 0 else np.nan,
+            "rolling_avg_30d": mean_30 if mean_30 is not None else np.nan,
             "same_weekday_avg_4w": np.mean(same_wd_vals) if same_wd_vals else np.nan,
             "day_of_month": d.day,
             "is_payday_period": 1 if d.day >= 25 or d.day <= 5 else 0,
             "trend_7d": trend_7d,
             "days_since_last_sale": days_since,
             "total_restaurant_sales_7d_avg": total_7d_avg,
+            "lag_1d": lag_1d,
+            "lag_7d": lag_7d,
+            "lag_14d": lag_14d,
+            "rolling_std_7d": rolling_std,
+            "cv_30d": cv_30d,
+            "sin_day_of_year": sin_doy,
+            "cos_day_of_year": cos_doy,
+            "sin_day_of_week": sin_dow,
+            "cos_day_of_week": cos_dow,
+            "weather_category": w_cat,
+            "temp_x_weekend": (temp * is_we) if not np.isnan(temp) else np.nan,
+            "precip_x_weekend": (precip * is_we) if not np.isnan(precip) else np.nan,
             "target": qty_series.iloc[i],
         })
 
@@ -174,16 +237,40 @@ def build_prediction_features(
         if total_vals:
             total_7d_avg = float(np.mean(total_vals))
 
+    # Lag features
+    lag_1d = daily.get(target_date - datetime.timedelta(days=1), np.nan)
+    lag_7d = daily.get(target_date - datetime.timedelta(days=7), np.nan)
+    lag_14d = daily.get(target_date - datetime.timedelta(days=14), np.nan)
+
+    # Volatility
+    rolling_std = float(np.std(recent_7)) if len(recent_7) >= 2 else np.nan
+    mean_30 = float(np.mean(recent_30)) if recent_30 else np.nan
+    std_30 = float(np.std(recent_30)) if len(recent_30) >= 2 else np.nan
+    cv_30d = (std_30 / mean_30) if mean_30 and mean_30 > 0 and not np.isnan(std_30) else np.nan
+
+    # Cyclic seasonality
+    doy = target_date.timetuple().tm_yday
+    sin_doy = np.sin(2 * np.pi * doy / 365.25)
+    cos_doy = np.cos(2 * np.pi * doy / 365.25)
+    sin_dow = np.sin(2 * np.pi * target_date.weekday() / 7)
+    cos_dow = np.cos(2 * np.pi * target_date.weekday() / 7)
+
+    # Weather category & interactions
+    w_cat = _weather_cat(weather)
+    is_we = 1 if cal["is_weekend"] else 0
+    temp = weather.temp_avg if weather else np.nan
+    precip = weather.precipitation if weather else np.nan
+
     features = np.array([
         target_date.weekday(),
         target_date.month,
         target_date.isocalendar()[1],
-        1 if cal["is_weekend"] else 0,
+        is_we,
         1 if cal["is_holiday"] else 0,
         1 if cal["is_pre_holiday"] else 0,
         1 if cal.get("is_day_off", cal["is_weekend"] or cal["is_holiday"]) else 0,
-        weather.temp_avg if weather else np.nan,
-        weather.precipitation if weather else np.nan,
+        temp,
+        precip,
         float(weather.humidity) if weather and weather.humidity is not None else np.nan,
         weather.wind_speed if weather and weather.wind_speed is not None else np.nan,
         np.mean(recent_7) if recent_7 else np.nan,
@@ -194,6 +281,18 @@ def build_prediction_features(
         trend_7d,
         days_since,
         total_7d_avg,
+        lag_1d,
+        lag_7d,
+        lag_14d,
+        rolling_std,
+        cv_30d,
+        sin_doy,
+        cos_doy,
+        sin_dow,
+        cos_dow,
+        w_cat,
+        (temp * is_we) if not np.isnan(temp) else np.nan,
+        (precip * is_we) if not np.isnan(precip) else np.nan,
     ], dtype=np.float64).reshape(1, -1)
 
     return features

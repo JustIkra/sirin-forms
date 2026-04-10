@@ -32,7 +32,7 @@ export default function App() {
     }
     let cancelled = false;
     setPlanFactLoading(true);
-    fetchPlanFact(result.date, result.method as 'llm' | 'ml')
+    fetchPlanFact(result.date, result.method)
       .then((data) => { if (!cancelled) setPlanFact(data); })
       .catch(() => { if (!cancelled) setPlanFact(null); })
       .finally(() => { if (!cancelled) setPlanFactLoading(false); });

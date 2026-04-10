@@ -12,7 +12,7 @@ export interface DailyForecastResult {
   weather: string | null;
   is_holiday: boolean;
   notes: string | null;
-  method: 'llm' | 'ml';
+  method: 'ml';
 }
 
 export interface PlanFactRecord {
