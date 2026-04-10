@@ -105,6 +105,8 @@ class MLForecastService:
         *,
         force: bool = False,
         _backfill: bool = True,
+        _dishes: list | None = None,
+        _recent_sales: list | None = None,
     ) -> DailyForecastResult:
         # 1. Cache check
         if not force:
@@ -113,9 +115,14 @@ class MLForecastService:
                 logger.info("Returning cached ML forecast for %s", target_date)
                 return cached
 
-        # 2. Get top-50 dishes (reuse DataCollector)
-        dishes = await self._collector.collect_products()
-        recent = await self._collector.collect_recent_sales(target_date)
+        # 2. Get top-50 dishes (reuse pre-fetched data or call iiko)
+        dishes = _dishes if _dishes is not None else await self._collector.collect_products()
+        if _recent_sales is not None:
+            date_from = target_date - datetime.timedelta(days=30)
+            date_to = target_date - datetime.timedelta(days=1)
+            recent = [s for s in _recent_sales if date_from <= s.date <= date_to]
+        else:
+            recent = await self._collector.collect_recent_sales(target_date)
         weather = await self._collector.collect_weather(target_date)
 
         # Filter to active dishes with recent sales
@@ -194,7 +201,7 @@ class MLForecastService:
 
         # Bias calibration from backfilled forecasts
         if _backfill:
-            bias = await self._backfill_and_get_bias(target_date)
+            bias = await self._backfill_and_get_bias(target_date, _dishes=dishes)
             if bias:
                 logger.info("Applying bias calibration for %d dishes", len(bias))
                 for dish_forecast in forecasts:
@@ -267,7 +274,7 @@ class MLForecastService:
 
         return fallback
 
-    async def _backfill_and_get_bias(self, target_date: datetime.date) -> dict[str, float]:
+    async def _backfill_and_get_bias(self, target_date: datetime.date, *, _dishes=None) -> dict[str, float]:
         """Backfill missing ML forecasts for X-14..X-1, compute per-dish bias with exponential decay."""
         today = datetime.date.today()
         dates = [
@@ -276,13 +283,25 @@ class MLForecastService:
             if (target_date - datetime.timedelta(days=i)) <= today
         ]
 
-        # Backfill missing forecasts (without recursion)
+        # Find dates that need backfill
+        dates_to_backfill = []
         for d in dates:
             existing = await self._forecasts_repo.get_forecast(d, method="ml")
             if existing is None:
+                dates_to_backfill.append(d)
+
+        # Pre-fetch data once for all backfill dates (2 iiko sessions instead of 2*N)
+        if dates_to_backfill:
+            dishes = _dishes if _dishes is not None else await self._collector.collect_products()
+            widest_lookback = (target_date - min(dates_to_backfill)).days + 30
+            all_sales = await self._collector.collect_recent_sales(target_date, days_back=widest_lookback)
+            for d in dates_to_backfill:
                 logger.info("Backfilling ML forecast for %s", d)
                 try:
-                    await self.generate_forecast(d, force=False, _backfill=False)
+                    await self.generate_forecast(
+                        d, force=False, _backfill=False,
+                        _dishes=dishes, _recent_sales=all_sales,
+                    )
                 except Exception:
                     logger.warning("ML backfill failed for %s, skipping", d, exc_info=True)
 
