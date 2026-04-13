@@ -29,7 +29,6 @@ from app.models.forecast import (
     AccuracyHistorySummary,
     DailyForecastResult,
     DiscrepancyAnalysisResponse,
-    DishTrend,
     MethodAccuracy,
     PlanFactResponse,
     PlanFactSummary,
@@ -362,56 +361,6 @@ async def get_accuracy_history(
     return AccuracyHistoryResponse(days=records, summary=summary)
 
 
-@router.get("/trends")
-async def get_trends(
-    weeks: int = Query(12, ge=4, le=52),
-    top_n: int = Query(20, ge=5, le=50),
-    sales_repo: SalesRepository = Depends(get_sales_repo),
-):
-    from app.services.trend_analysis import TrendAnalyzer
-
-    analyzer = TrendAnalyzer(sales_repo=sales_repo)
-    trends = await analyzer.get_dish_trends(weeks=weeks, top_n=top_n)
-    growing = [t for t in trends if t.trend_direction == "growing"]
-    declining = [t for t in trends if t.trend_direction == "declining"]
-    return {
-        "weeks": weeks,
-        "growing": [t.model_dump() for t in growing],
-        "declining": [t.model_dump() for t in declining],
-    }
-
-
-class ProcurementRequest(BaseModel):
-    date: datetime.date
-    method: str = "ml"
-
-
-@router.post("/procurement")
-async def generate_procurement(
-    body: ProcurementRequest,
-    iiko_client: IikoClient = Depends(get_iiko_client),
-    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
-    sales_repo: SalesRepository = Depends(get_sales_repo),
-    settings: Settings = Depends(get_settings),
-):
-    from app.services.procurement import ProcurementService
-
-    service = ProcurementService(
-        iiko_client=iiko_client,
-        forecasts_repo=forecasts_repo,
-        sales_repo=sales_repo,
-        settings=settings,
-    )
-    try:
-        result = await service.generate_list(body.date, method=body.method)
-        return result
-    except ValueError as exc:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
-    except Exception as exc:
-        logger.error("Procurement error: %s", exc, exc_info=True)
-        return JSONResponse(status_code=500, content={"detail": str(exc)})
-
-
 class BackfillRequest(BaseModel):
     date_from: datetime.date
     date_to: datetime.date
@@ -488,7 +437,7 @@ async def train_ml_models(
 async def export_data(
     date: datetime.date = Query(...),
     method: str = Query("ml"),
-    type: str = Query("forecast"),  # forecast | plan-fact | procurement
+    type: str = Query("forecast"),  # forecast | plan-fact
     format: str = Query("json"),    # json | csv | xlsx
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
@@ -526,25 +475,6 @@ async def export_data(
             for r in records
         ]
         columns = ["dish_name", "predicted_quantity", "actual_quantity", "deviation_pct"]
-    elif type == "procurement":
-        from app.services.procurement import ProcurementService
-
-        service = ProcurementService(
-            iiko_client=iiko_client,
-            forecasts_repo=forecasts_repo,
-            sales_repo=sales_repo,
-            settings=settings,
-        )
-        try:
-            result = await service.generate_list(date, method=method)
-        except ValueError as exc:
-            return JSONResponse(status_code=422, content={"detail": str(exc)})
-        rows = [
-            {"ingredient_name": i.ingredient_name, "unit": i.unit,
-             "required_amount": i.required_amount, "buffered_amount": i.buffered_amount}
-            for i in result.items
-        ]
-        columns = ["ingredient_name", "unit", "required_amount", "buffered_amount"]
     else:
         return JSONResponse(status_code=400, content={"detail": f"Unknown type: {type}"})
 

@@ -2,8 +2,6 @@ import type {
   DailyForecastResult,
   DiscrepancyAnalysisResponse,
   PlanFactResponse,
-  ProcurementList,
-  TrendsResponse,
 } from '../types/forecast';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
@@ -71,27 +69,6 @@ export async function fetchDiscrepancyAnalysis(
   return res.json();
 }
 
-export async function fetchTrends(weeks = 12): Promise<TrendsResponse> {
-  const res = await fetch(`${BASE_URL}/api/trends?weeks=${weeks}`);
-  if (!res.ok) throw new ForecastError(res.status, 'Ошибка загрузки трендов');
-  return res.json();
-}
-
-export async function fetchProcurement(
-  date: string,
-  method: 'ml' = 'ml',
-): Promise<ProcurementList> {
-  const res = await fetch(`${BASE_URL}/api/procurement`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, method }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ForecastError(res.status, body.detail ?? 'Ошибка закупок');
-  }
-  return res.json();
-}
 
 export function getExportUrl(
   date: string,

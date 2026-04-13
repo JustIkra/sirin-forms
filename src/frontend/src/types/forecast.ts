@@ -76,41 +76,6 @@ export interface DiscrepancyAnalysisResponse {
   accuracy_context: string;
 }
 
-// --- Trends ---
-
-export interface DishTrend {
-  dish_name: string;
-  current_weekly_avg: number;
-  prev_weekly_avg: number;
-  change_pct: number;
-  trend_direction: 'growing' | 'declining' | 'stable';
-  seasonality_factor: number | null;
-  weekly_data: number[];
-}
-
-export interface TrendsResponse {
-  weeks: number;
-  growing: DishTrend[];
-  declining: DishTrend[];
-}
-
-// --- Procurement ---
-
-export interface IngredientNeed {
-  ingredient_id: string;
-  ingredient_name: string;
-  unit: string;
-  required_amount: number;
-  buffered_amount: number;
-}
-
-export interface ProcurementList {
-  date_from: string;
-  date_to: string;
-  items: IngredientNeed[];
-  generated_at: string;
-}
-
 // --- Pages ---
 
-export type PageId = 'forecast' | 'trends' | 'procurement';
+export type PageId = 'forecast';

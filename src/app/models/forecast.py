@@ -26,21 +26,6 @@ class DailyForecastResult(BaseModel):
     week_end: datetime.date | None = None
 
 
-class IngredientNeed(BaseModel):
-    ingredient_id: str
-    ingredient_name: str
-    unit: str
-    required_amount: float
-    buffered_amount: float
-
-
-class ProcurementList(BaseModel):
-    date_from: datetime.date
-    date_to: datetime.date
-    items: list[IngredientNeed]
-    generated_at: datetime.datetime
-
-
 class PlanFactRecord(BaseModel):
     date: datetime.date
     dish_id: str
@@ -120,15 +105,3 @@ class AccuracyHistorySummary(BaseModel):
 class AccuracyHistoryResponse(BaseModel):
     days: list[AccuracyDayRecord]
     summary: AccuracyHistorySummary
-
-
-# --- Dish Trends ---
-
-class DishTrend(BaseModel):
-    dish_name: str
-    current_weekly_avg: float
-    prev_weekly_avg: float
-    change_pct: float
-    trend_direction: str  # "growing" | "declining" | "stable"
-    seasonality_factor: float | None = None
-    weekly_data: list[float] = []

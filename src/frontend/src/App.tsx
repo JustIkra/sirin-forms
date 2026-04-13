@@ -7,8 +7,6 @@ import PlanFactSection from './components/PlanFactSection';
 import ExportButtons from './components/ExportButtons';
 import Spinner from './components/Spinner';
 import ErrorMessage from './components/ErrorMessage';
-import TrendsPage from './pages/TrendsPage';
-import ProcurementPage from './pages/ProcurementPage';
 import { fetchForecast, fetchPlanFact, ForecastError } from './api/forecast';
 import type { DailyForecastResult, PlanFactResponse, PageId } from './types/forecast';
 
@@ -90,9 +88,6 @@ export default function App() {
         </>
       )}
 
-      {page === 'trends' && <TrendsPage />}
-
-      {page === 'procurement' && <ProcurementPage />}
     </Layout>
   );
 }
