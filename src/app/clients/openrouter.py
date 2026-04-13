@@ -119,6 +119,8 @@ class OpenRouterClient:
         sales_data: str,
         weather_data: str,
         calendar_info: str,
+        week_start: str = "",
+        week_end: str = "",
     ) -> DiscrepancyAnalysisResponse:
         cfg = load_prompt("discrepancy_analysis")
         messages = [
@@ -137,6 +139,8 @@ class OpenRouterClient:
                     sales_data=sales_data,
                     weather_data=weather_data,
                     calendar_info=calendar_info,
+                    week_start=week_start,
+                    week_end=week_end,
                 ),
             ),
         ]

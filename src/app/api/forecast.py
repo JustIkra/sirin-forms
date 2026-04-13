@@ -40,7 +40,7 @@ from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
 from app.repositories.weather import WeatherRepository
 from app.services.backfill import BackfillService
-from app.services.context_formatter import build_calendar_info, build_sales_data, build_weather_data
+from app.services.context_formatter import build_calendar_info_weekly, build_sales_data, build_weather_data_weekly
 from app.services.data_collector import DataCollector
 from app.services.ml_forecast import MLForecastService
 
@@ -209,10 +209,14 @@ async def analyze_discrepancies(
     openrouter_client: OpenRouterClient = Depends(get_openrouter_client),
 ) -> DiscrepancyAnalysisResponse | JSONResponse:
     today = datetime.date.today()
-    if body.date > today:
+    # Weekly boundaries
+    week_start = body.date - datetime.timedelta(days=body.date.weekday())
+    week_end = week_start + datetime.timedelta(days=6)
+
+    if week_end > today:
         return JSONResponse(
             status_code=422,
-            content={"detail": "Дата в будущем — фактических данных нет"},
+            content={"detail": "Неделя ещё не завершена — фактических данных нет"},
         )
 
     forecast = await forecasts_repo.get_forecast(body.date, method=body.method)
@@ -222,17 +226,27 @@ async def analyze_discrepancies(
             content={"detail": "Прогноз на эту дату не найден"},
         )
 
-    # Actual sales from DB cache
-    sales = await sales_repo.get_sales_by_period(body.date, body.date)
+    # Actual sales for the whole week from DB cache
+    sales = await sales_repo.get_sales_by_period(week_start, week_end)
     if not sales:
         return JSONResponse(
             status_code=422,
-            content={"detail": "Фактические продажи за эту дату отсутствуют"},
+            content={"detail": "Фактические продажи за эту неделю отсутствуют"},
         )
 
+    # Aggregate per dish across week
+    dish_agg: dict[str, dict] = {}
+    for s in sales:
+        key = s.dish_name.strip().lower()
+        if key not in dish_agg:
+            dish_agg[key] = {"dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": 0.0, "total": 0.0}
+        dish_agg[key]["quantity"] += s.quantity
+        dish_agg[key]["total"] += s.total
+
     actual_sales = [
-        {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
-        for s in sales
+        {"date": week_start, "dish_id": d["dish_id"], "dish_name": d["dish_name"],
+         "quantity": d["quantity"], "total": d["total"]}
+        for d in dish_agg.values()
     ]
     records = await forecasts_repo.get_plan_fact(body.date, body.date, actual_sales, method=body.method)
 
@@ -258,7 +272,7 @@ async def analyze_discrepancies(
         )
     plan_fact_details = "\n".join(pf_lines)
 
-    # Extract key_factors and notes from stored forecast
+    # Extract key_factors and notes
     kf_lines = []
     for d in forecast.forecasts:
         if d.key_factors:
@@ -266,20 +280,19 @@ async def analyze_discrepancies(
     forecast_key_factors = "\n".join(kf_lines) if kf_lines else "Нет данных"
     forecast_notes = forecast.notes or "Нет заметок"
 
-    # Rebuild context from DB
-    historical_from = body.date - datetime.timedelta(days=372)
-    recent_from = body.date - datetime.timedelta(days=30)
-    recent_to = body.date - datetime.timedelta(days=1)
+    # Context: sales history, weather, calendar — all weekly
+    recent_from = week_start - datetime.timedelta(days=30)
+    recent_to = week_start - datetime.timedelta(days=1)
+    historical_from = week_start - datetime.timedelta(days=372)
 
     historical_sales = await sales_repo.get_sales_by_period(historical_from, recent_to)
     recent_sales = await sales_repo.get_sales_by_period(recent_from, recent_to)
 
-    weather_list = await weather_repo.get_weather_range(body.date, body.date)
-    weather = weather_list[0] if weather_list else None
+    weather_records = await weather_repo.get_weather_range(week_start, week_end)
 
-    sales_data = build_sales_data(historical_sales, recent_sales, body.date)
-    weather_data = build_weather_data(weather)
-    calendar_info = build_calendar_info(body.date)
+    sales_data = build_sales_data(historical_sales, recent_sales, week_start)
+    weather_data = build_weather_data_weekly(weather_records, week_start, week_end)
+    calendar_info = build_calendar_info_weekly(week_start, week_end)
 
     result = await openrouter_client.generate_discrepancy_analysis(
         plan_fact_details=plan_fact_details,
@@ -293,6 +306,8 @@ async def analyze_discrepancies(
         sales_data=sales_data,
         weather_data=weather_data,
         calendar_info=calendar_info,
+        week_start=week_start.isoformat(),
+        week_end=week_end.isoformat(),
     )
     result.date = body.date
     result.method = body.method
