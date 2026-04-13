@@ -37,6 +37,7 @@ class DataCollector:
         self._products_repo = products_repo
         self._weather_repo = weather_repo
         self._history_months = settings.history_months
+        self._department_id = settings.iiko_department_id
 
     _FORECAST_PRODUCT_TYPES = {ProductType.DISH, ProductType.GOODS, ProductType.PREPARED}
 
@@ -61,14 +62,7 @@ class DataCollector:
                         date_to=date_to,
                         group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
                         aggregate_fields=["DishAmountInt", "DishSumInt"],
-                        filters={"OpenDate.Typed": {
-                            "filterType": "DateRange",
-                            "periodType": "CUSTOM",
-                            "from": date_from.isoformat(),
-                            "to": date_to.isoformat(),
-                            "includeLow": True,
-                            "includeHigh": True,
-                        }},
+                        filters=self.build_olap_filters(date_from, date_to, self._department_id),
                     ),
                 )
                 sales = self._parse_olap_sales(report.data)
@@ -106,14 +100,7 @@ class DataCollector:
                     date_to=date_to,
                     group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
                     aggregate_fields=["DishAmountInt", "DishSumInt"],
-                    filters={"OpenDate.Typed": {
-                        "filterType": "DateRange",
-                        "periodType": "CUSTOM",
-                        "from": date_from.isoformat(),
-                        "to": date_to.isoformat(),
-                        "includeLow": True,
-                        "includeHigh": True,
-                    }},
+                    filters=self.build_olap_filters(date_from, date_to, self._department_id),
                 ),
             )
             sales = self._parse_olap_sales(report.data)
@@ -148,6 +135,29 @@ class DataCollector:
         except ApiClientError:
             logger.warning("Weather API unavailable", exc_info=True)
             return None
+
+    @staticmethod
+    def build_olap_filters(
+        date_from: datetime.date,
+        date_to: datetime.date,
+        department_id: str | None = None,
+    ) -> dict:
+        filters: dict = {
+            "OpenDate.Typed": {
+                "filterType": "DateRange",
+                "periodType": "CUSTOM",
+                "from": date_from.isoformat(),
+                "to": date_to.isoformat(),
+                "includeLow": True,
+                "includeHigh": True,
+            },
+        }
+        if department_id:
+            filters["Department.Id"] = {
+                "filterType": "IncludeValues",
+                "values": [department_id],
+            }
+        return filters
 
     @staticmethod
     def _build_historical_ranges(

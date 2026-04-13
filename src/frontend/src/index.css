@@ -26,3 +26,25 @@ body {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border-card);
+  border: 1px solid var(--border-card);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.stat-cell {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  padding: 1.25rem 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

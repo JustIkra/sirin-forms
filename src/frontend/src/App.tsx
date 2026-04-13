@@ -62,9 +62,9 @@ export default function App() {
       {page === 'forecast' && (
         <>
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-gradient">Прогнозный прогон</h2>
+            <h2 className="text-xl font-bold text-gradient">Недельный прогноз</h2>
             <p className="text-sm text-slate-400">
-              Сборка forecast packet: формирование прогноза спроса
+              Прогноз спроса на неделю по блюдам
             </p>
           </div>
 
@@ -78,9 +78,9 @@ export default function App() {
 
           {result && !loading && (
             <div id="print-area-forecast" className="mt-6 space-y-6">
-              <ForecastMeta result={result} />
+              <ForecastMeta result={result} summary={planFact?.summary} />
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Прогноз по блюдам</h3>
+                <h3 className="text-lg font-semibold text-white">Прогноз по блюдам (неделя)</h3>
                 <ExportButtons date={result.date} method={result.method} type="forecast" />
               </div>
               <ForecastTable forecasts={result.forecasts} planFact={planFact?.records} />

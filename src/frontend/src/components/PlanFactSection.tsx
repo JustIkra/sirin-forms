@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DiscrepancyAnalysisResponse, PlanFactResponse } from '../types/forecast';
 import { fetchDiscrepancyAnalysis } from '../api/forecast';
-import PlanFactSummaryCard from './PlanFactSummary';
-import PlanFactTable from './PlanFactTable';
 import DiscrepancyAnalysis from './DiscrepancyAnalysis';
 
 interface Props {
@@ -34,24 +32,10 @@ export default function PlanFactSection({ data, loading }: Props) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="mt-8">
-        <h2 className="mb-4 text-xl font-bold text-white">План-факт</h2>
-        <div className="flex items-center justify-center py-12">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-blue-400" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
+  if (loading || !data) return null;
 
   return (
-    <div className="mt-8 space-y-6">
-      <h2 className="text-xl font-bold text-white">План-факт</h2>
-      <PlanFactSummaryCard summary={data.summary} />
-      <PlanFactTable records={data.records} />
+    <div className="space-y-6">
       <DiscrepancyAnalysis
         data={analysis}
         loading={analysisLoading}

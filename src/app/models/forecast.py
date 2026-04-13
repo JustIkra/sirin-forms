@@ -10,6 +10,7 @@ class DishForecast(BaseModel):
     confidence: float
     key_factors: list[str] = []
     price: float | None = None
+    prediction_method: str = "ml"
 
 
 class DailyForecastResult(BaseModel):
@@ -19,6 +20,10 @@ class DailyForecastResult(BaseModel):
     is_holiday: bool = False
     notes: str | None = None
     method: str = "ml"
+    ml_count: int = 0
+    fallback_count: int = 0
+    week_start: datetime.date | None = None
+    week_end: datetime.date | None = None
 
 
 class IngredientNeed(BaseModel):

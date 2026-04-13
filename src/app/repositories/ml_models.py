@@ -9,10 +9,22 @@ from app.repositories.base import BaseRepository
 class MLModelsRepository(BaseRepository[MLModelRecord]):
     model = MLModelRecord
 
-    async def get_latest_model(self, dish_id: str) -> MLModelRecord | None:
+    async def get_latest_model(self, dish_id: str, dish_name: str | None = None) -> MLModelRecord | None:
+        # Try by ID first
         stmt = (
             select(MLModelRecord)
             .where(MLModelRecord.dish_id == dish_id)
+            .order_by(MLModelRecord.trained_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        record = result.scalars().first()
+        if record or not dish_name:
+            return record
+        # Fallback: match by name (handles iiko duplicate IDs)
+        stmt = (
+            select(MLModelRecord)
+            .where(func.lower(func.trim(MLModelRecord.dish_name)) == dish_name.strip().lower())
             .order_by(MLModelRecord.trained_at.desc())
             .limit(1)
         )

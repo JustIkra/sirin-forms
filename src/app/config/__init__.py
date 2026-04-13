@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     iiko_server_url: str
     iiko_login: str
     iiko_password: str
+    iiko_department_id: str | None = None
 
     # OpenRouter (LLM)
     openrouter_api_key: SecretStr

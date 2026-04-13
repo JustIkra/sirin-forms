@@ -100,6 +100,53 @@ class WeatherClient(BaseHttpClient):
         all_days.sort(key=lambda d: d.date)
         return all_days
 
+    async def get_historical_range(
+        self, date_from: datetime.date, date_to: datetime.date,
+    ) -> list[DailyWeather]:
+        """Fetch historical weather from Open-Meteo Archive API (no day limit)."""
+        import httpx
+
+        all_days: list[DailyWeather] = []
+        chunk_start = date_from
+        async with httpx.AsyncClient(timeout=60.0) as http:
+            while chunk_start <= date_to:
+                chunk_end = min(
+                    chunk_start.replace(year=chunk_start.year + 1) - datetime.timedelta(days=1),
+                    date_to,
+                )
+                params = {
+                    "latitude": str(self._lat),
+                    "longitude": str(self._lon),
+                    "daily": _DAILY_FIELDS,
+                    "timezone": "Europe/Moscow",
+                    "start_date": chunk_start.isoformat(),
+                    "end_date": chunk_end.isoformat(),
+                }
+                try:
+                    response = await http.get(
+                        "https://archive-api.open-meteo.com/v1/archive",
+                        params=params,
+                    )
+                    if response.status_code == 200:
+                        days = self._parse_daily(response.json())
+                        all_days.extend(days)
+                        logger.info(
+                            "Weather archive %s–%s: %d days",
+                            chunk_start, chunk_end, len(days),
+                        )
+                    else:
+                        logger.warning(
+                            "Weather archive failed %s–%s: %s",
+                            chunk_start, chunk_end, response.text,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Weather archive error %s–%s: %s",
+                        chunk_start, chunk_end, exc,
+                    )
+                chunk_start = chunk_end + datetime.timedelta(days=1)
+        return all_days
+
     async def _fetch(self, past_days: int, forecast_days: int) -> list[DailyWeather]:
         params = {
             "latitude": str(self._lat),

@@ -15,9 +15,11 @@ class BackfillService:
         self,
         iiko_client: IikoClient,
         sales_repo: SalesRepository,
+        department_id: str | None = None,
     ) -> None:
         self._iiko = iiko_client
         self._sales_repo = sales_repo
+        self._department_id = department_id
 
     async def backfill(
         self,
@@ -41,14 +43,9 @@ class BackfillService:
                         date_to=chunk_end,
                         group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
                         aggregate_fields=["DishAmountInt", "DishSumInt"],
-                        filters={"OpenDate.Typed": {
-                            "filterType": "DateRange",
-                            "periodType": "CUSTOM",
-                            "from": current.isoformat(),
-                            "to": chunk_end.isoformat(),
-                            "includeLow": True,
-                            "includeHigh": True,
-                        }},
+                        filters=DataCollector.build_olap_filters(
+                            current, chunk_end, self._department_id,
+                        ),
                     ),
                 )
                 sales = DataCollector._parse_olap_sales(report.data)

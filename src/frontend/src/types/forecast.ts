@@ -4,6 +4,7 @@ export interface DishForecast {
   predicted_quantity: number;
   key_factors: string[];
   price: number | null;
+  prediction_method: 'ml' | 'fallback';
 }
 
 export interface DailyForecastResult {
@@ -13,6 +14,10 @@ export interface DailyForecastResult {
   is_holiday: boolean;
   notes: string | null;
   method: 'ml';
+  ml_count: number;
+  fallback_count: number;
+  week_start: string | null;
+  week_end: string | null;
 }
 
 export interface PlanFactRecord {

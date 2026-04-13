@@ -114,10 +114,14 @@ async def get_plan_fact(
     settings: Settings = Depends(get_settings),
 ) -> PlanFactResponse | JSONResponse:
     today = datetime.date.today()
-    if date > today:
+    # Weekly: compute week boundaries
+    week_start = date - datetime.timedelta(days=date.weekday())
+    week_end = week_start + datetime.timedelta(days=6)
+
+    if week_end > today:
         return JSONResponse(
             status_code=422,
-            content={"detail": "Дата в будущем — фактических данных нет"},
+            content={"detail": "Неделя ещё не завершена — фактических данных нет"},
         )
 
     forecast = await forecasts_repo.get_forecast(date, method=method)
@@ -127,23 +131,18 @@ async def get_plan_fact(
             content={"detail": "Прогноз на эту дату не найден"},
         )
 
-    # Fetch actual sales from iiko, fallback to DB cache
+    # Fetch actual sales for the whole week from iiko
     try:
         report = await iiko_client.get_olap_report_v2(
             OlapV2Request(
                 report_type=OlapReportType.SALES,
-                date_from=date,
-                date_to=date,
+                date_from=week_start,
+                date_to=week_end,
                 group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
                 aggregate_fields=["DishAmountInt", "DishSumInt"],
-                filters={"OpenDate.Typed": {
-                    "filterType": "DateRange",
-                    "periodType": "CUSTOM",
-                    "from": date.isoformat(),
-                    "to": date.isoformat(),
-                    "includeLow": True,
-                    "includeHigh": True,
-                }},
+                filters=DataCollector.build_olap_filters(
+                    week_start, week_end, settings.iiko_department_id,
+                ),
             ),
         )
         sales = DataCollector._parse_olap_sales(report.data)
@@ -151,12 +150,21 @@ async def get_plan_fact(
             await sales_repo.bulk_upsert_sales(sales)
     except Exception:
         logger.warning("iiko unavailable for plan-fact %s, using DB cache", date, exc_info=True)
-        sales = await sales_repo.get_sales_by_period(date, date)
+        sales = await sales_repo.get_sales_by_period(week_start, week_end)
+
+    # Aggregate sales per dish across the week
+    dish_agg: dict[str, dict] = {}
+    for s in sales:
+        key = s.dish_name.strip().lower()
+        if key not in dish_agg:
+            dish_agg[key] = {"dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": 0.0, "total": 0.0}
+        dish_agg[key]["quantity"] += s.quantity
+        dish_agg[key]["total"] += s.total
 
     actual_sales = [
-        {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name,
-         "quantity": s.quantity, "total": s.total}
-        for s in sales
+        {"date": week_start, "dish_id": d["dish_id"], "dish_name": d["dish_name"],
+         "quantity": d["quantity"], "total": d["total"]}
+        for d in dish_agg.values()
     ]
     records = await forecasts_repo.get_plan_fact(date, date, actual_sales, method=method)
 
@@ -414,10 +422,35 @@ async def run_backfill(
     body: BackfillRequest,
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
+    settings: Settings = Depends(get_settings),
 ):
-    service = BackfillService(iiko_client=iiko_client, sales_repo=sales_repo)
+    service = BackfillService(
+        iiko_client=iiko_client,
+        sales_repo=sales_repo,
+        department_id=settings.iiko_department_id,
+    )
     result = await service.backfill(body.date_from, body.date_to)
     return result
+
+
+@router.post("/weather/backfill")
+async def backfill_weather(
+    body: BackfillRequest,
+    weather_client: WeatherClient = Depends(get_weather_client),
+    weather_repo: WeatherRepository = Depends(get_weather_repo),
+):
+    """Backfill historical weather data from Open-Meteo Archive API."""
+    days = await weather_client.get_historical_range(body.date_from, body.date_to)
+    saved = 0
+    for day in days:
+        await weather_repo.save_daily_weather(day)
+        saved += 1
+    return {
+        "fetched": len(days),
+        "saved": saved,
+        "date_from": body.date_from.isoformat(),
+        "date_to": body.date_to.isoformat(),
+    }
 
 
 @router.post("/ml/train")

@@ -1,5 +1,6 @@
 .worktrees/
 .ruff_cache
+docs
 
 # Python
 __pycache__/
