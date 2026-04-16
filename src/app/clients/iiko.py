@@ -48,7 +48,8 @@ class IikoClient(BaseHttpClient):
 
     async def _authenticate(self) -> str:
         response = await self._request(
-            "GET", "/auth",
+            "GET",
+            "/auth",
             params={"login": self._login, "pass": self._password_hash},
         )
         if response.status_code != 200:
@@ -79,6 +80,7 @@ class IikoClient(BaseHttpClient):
 
     def _check_response(self, response: object, context: str) -> None:
         from httpx import Response
+
         resp: Response = response  # type: ignore[assignment]
         if resp.status_code != 200:
             raise IikoApiError(
@@ -89,6 +91,7 @@ class IikoClient(BaseHttpClient):
     def _parse_json(self, response: object, context: str) -> Any:
         """Parse JSON from response, raising IikoApiError with diagnostic info on failure."""
         from httpx import Response
+
         resp: Response = response  # type: ignore[assignment]
         self._check_response(resp, context)
         body = resp.text
@@ -114,6 +117,7 @@ class IikoClient(BaseHttpClient):
         serialization. XML works correctly.
         """
         from httpx import Response
+
         resp: Response = response  # type: ignore[assignment]
         self._check_response(resp, context)
         body = resp.text
@@ -148,7 +152,9 @@ class IikoClient(BaseHttpClient):
             if include_deleted:
                 params["includeDeleted"] = "true"
             response = await self._request(
-                "GET", "/v2/entities/products/list", params=params,
+                "GET",
+                "/v2/entities/products/list",
+                params=params,
             )
             items = self._parse_json(response, "get_products")
             return [
@@ -180,7 +186,9 @@ class IikoClient(BaseHttpClient):
             if product_type:
                 params["productType"] = product_type
             response = await self._request(
-                "GET", "/products/search", params=params,
+                "GET",
+                "/products/search",
+                params=params,
                 headers={"Accept": "application/xml"},
             )
             items = self._parse_xml_list(response, "search_products")
@@ -200,7 +208,9 @@ class IikoClient(BaseHttpClient):
     async def get_stores(self) -> list[IikoStore]:
         async with self._session() as token:
             response = await self._request(
-                "GET", "/corporation/stores", params={"key": token},
+                "GET",
+                "/corporation/stores",
+                params={"key": token},
                 headers={"Accept": "application/xml"},
             )
             items = self._parse_xml_list(response, "get_stores")
@@ -217,7 +227,9 @@ class IikoClient(BaseHttpClient):
     async def get_departments(self) -> list[IikoDepartment]:
         async with self._session() as token:
             response = await self._request(
-                "GET", "/corporation/departments", params={"key": token},
+                "GET",
+                "/corporation/departments",
+                params={"key": token},
                 headers={"Accept": "application/xml"},
             )
             items = self._parse_xml_list(response, "get_departments")
@@ -234,7 +246,9 @@ class IikoClient(BaseHttpClient):
     async def get_suppliers(self) -> list[IikoSupplier]:
         async with self._session() as token:
             response = await self._request(
-                "GET", "/suppliers", params={"key": token},
+                "GET",
+                "/suppliers",
+                params={"key": token},
                 headers={"Accept": "application/xml"},
             )
             items = self._parse_xml_list(response, "get_suppliers")
@@ -258,7 +272,8 @@ class IikoClient(BaseHttpClient):
     ) -> list[SaleRecord]:
         async with self._session() as token:
             response = await self._request(
-                "GET", "/reports/sales",
+                "GET",
+                "/reports/sales",
                 params={
                     "key": token,
                     "department": department,
@@ -266,7 +281,10 @@ class IikoClient(BaseHttpClient):
                     "dateTo": date_to,
                 },
             )
-            return [SaleRecord.model_validate(r) for r in self._parse_json(response, "get_sales_report")]
+            return [
+                SaleRecord.model_validate(r)
+                for r in self._parse_json(response, "get_sales_report")
+            ]
 
     async def get_olap_report(
         self,
@@ -322,7 +340,8 @@ class IikoClient(BaseHttpClient):
                 "filters": request.filters,
             }
             response = await self._request(
-                "POST", "/v2/reports/olap",
+                "POST",
+                "/v2/reports/olap",
                 params={
                     "key": token,
                     "dateFrom": request.date_from.isoformat(),
@@ -339,6 +358,24 @@ class IikoClient(BaseHttpClient):
                 data=data,
             )
 
+    async def get_balance_stores(
+        self,
+        date: datetime.date,
+        department: str,
+    ) -> list[dict]:
+        """GET /v2/reports/balance/stores — остатки на складе."""
+        async with self._session() as token:
+            response = await self._request(
+                "GET",
+                "/v2/reports/balance/stores",
+                params={
+                    "key": token,
+                    "timestamp": date.isoformat(),
+                    "department": department,
+                },
+            )
+            return self._parse_json(response, "balance/stores")
+
     async def get_product_expense(
         self,
         department: str,
@@ -348,7 +385,8 @@ class IikoClient(BaseHttpClient):
         """Get ingredient consumption report. Returns list of {date, productName, productId, value}."""
         async with self._session() as token:
             response = await self._request(
-                "GET", "/reports/productExpense",
+                "GET",
+                "/reports/productExpense",
                 params={
                     "key": token,
                     "department": department,
@@ -367,7 +405,8 @@ class IikoClient(BaseHttpClient):
         """Get warehouse operations (invoices, write-offs, transfers)."""
         async with self._session() as token:
             response = await self._request(
-                "GET", "/reports/storeOperations",
+                "GET",
+                "/reports/storeOperations",
                 params={
                     "key": token,
                     "dateFrom": date_from.strftime("%d.%m.%Y"),
@@ -385,7 +424,8 @@ class IikoClient(BaseHttpClient):
     ) -> list[dict]:
         async with self._session() as token:
             response = await self._request(
-                "GET", "/reports/ingredientEntry",
+                "GET",
+                "/reports/ingredientEntry",
                 params={
                     "key": token,
                     "department": department,

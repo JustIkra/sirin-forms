@@ -3,6 +3,7 @@ import type { PageId } from '../types/forecast';
 
 const NAV_ITEMS: { id: PageId; label: string }[] = [
   { id: 'forecast', label: 'Прогноз' },
+  { id: 'inventory', label: 'Остатки' },
 ];
 
 interface Props {

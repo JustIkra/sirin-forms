@@ -37,16 +37,38 @@ class ProductsRepository(BaseRepository[ProductRecord]):
             await self._session.merge(record)
 
             for ing in product.ingredients:
-                self._session.add(IngredientRecord(
-                    product_id=product.id,
-                    ingredient_id=ing.product_id,
-                    name=ing.name,
-                    amount=ing.amount,
-                    unit=ing.unit,
-                ))
+                self._session.add(
+                    IngredientRecord(
+                        product_id=product.id,
+                        ingredient_id=ing.product_id,
+                        name=ing.name,
+                        amount=ing.amount,
+                        unit=ing.unit,
+                    )
+                )
 
         await self._session.flush()
         return len(products)
+
+    async def get_product_names(self) -> dict[str, str]:
+        """Return mapping product_id → name for all products."""
+        stmt = select(ProductRecord.id, ProductRecord.name)
+        result = await self._session.execute(stmt)
+        return {row[0]: row[1] for row in result.all()}
+
+    async def get_ingredient_units(self) -> tuple[dict[str, str], dict[str, str]]:
+        """Return (names, units) mappings from all ingredient records."""
+        stmt = select(
+            IngredientRecord.ingredient_id, IngredientRecord.name, IngredientRecord.unit
+        )
+        result = await self._session.execute(stmt)
+        # Последняя запись побеждает при дубликатах
+        names: dict[str, str] = {}
+        units: dict[str, str] = {}
+        for row in result.all():
+            names[row[0]] = row[1]
+            units[row[0]] = row[2]
+        return names, units
 
     async def get_active_dishes(self) -> list[IikoProduct]:
         stmt = select(ProductRecord).where(ProductRecord.product_type == "dish")

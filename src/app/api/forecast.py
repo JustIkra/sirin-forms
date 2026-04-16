@@ -4,10 +4,8 @@ import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
-    get_db_session,
     get_forecasts_repo,
     get_iiko_client,
     get_ml_models_repo,
@@ -23,6 +21,7 @@ from app.clients.openrouter import OpenRouterClient
 from app.clients.weather import WeatherClient
 from app.config import Settings
 from app.exceptions import ApiClientError, ForecastError
+from app.models.inventory import InventoryResponse
 from app.models.forecast import (
     AccuracyDayRecord,
     AccuracyHistoryResponse,
@@ -40,7 +39,12 @@ from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
 from app.repositories.weather import WeatherRepository
 from app.services.backfill import BackfillService
-from app.services.context_formatter import build_calendar_info_weekly, build_sales_data, build_weather_data_weekly
+from app.services.inventory import InventoryService
+from app.services.context_formatter import (
+    build_calendar_info_weekly,
+    build_sales_data,
+    build_weather_data_weekly,
+)
 from app.services.data_collector import DataCollector
 from app.services.ml_forecast import MLForecastService
 
@@ -140,7 +144,9 @@ async def get_plan_fact(
                 group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
                 aggregate_fields=["DishAmountInt", "DishSumInt"],
                 filters=DataCollector.build_olap_filters(
-                    week_start, week_end, settings.iiko_department_id,
+                    week_start,
+                    week_end,
+                    settings.iiko_department_id,
                 ),
             ),
         )
@@ -148,7 +154,9 @@ async def get_plan_fact(
         if sales:
             await sales_repo.bulk_upsert_sales(sales)
     except Exception:
-        logger.warning("iiko unavailable for plan-fact %s, using DB cache", date, exc_info=True)
+        logger.warning(
+            "iiko unavailable for plan-fact %s, using DB cache", date, exc_info=True
+        )
         sales = await sales_repo.get_sales_by_period(week_start, week_end)
 
     # Aggregate sales per dish across the week
@@ -156,20 +164,33 @@ async def get_plan_fact(
     for s in sales:
         key = s.dish_name.strip().lower()
         if key not in dish_agg:
-            dish_agg[key] = {"dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": 0.0, "total": 0.0}
+            dish_agg[key] = {
+                "dish_id": s.dish_id,
+                "dish_name": s.dish_name,
+                "quantity": 0.0,
+                "total": 0.0,
+            }
         dish_agg[key]["quantity"] += s.quantity
         dish_agg[key]["total"] += s.total
 
     actual_sales = [
-        {"date": week_start, "dish_id": d["dish_id"], "dish_name": d["dish_name"],
-         "quantity": d["quantity"], "total": d["total"]}
+        {
+            "date": week_start,
+            "dish_id": d["dish_id"],
+            "dish_name": d["dish_name"],
+            "quantity": d["quantity"],
+            "total": d["total"],
+        }
         for d in dish_agg.values()
     ]
-    records = await forecasts_repo.get_plan_fact(date, date, actual_sales, method=method)
+    records = await forecasts_repo.get_plan_fact(
+        date, date, actual_sales, method=method
+    )
 
     # Calculate MAPE using max(actual, predicted) as denominator
     deviations = [
-        abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
+        abs(r.actual_quantity - r.predicted_quantity)
+        / max(r.actual_quantity, r.predicted_quantity)
         for r in records
         if r.actual_quantity > 0
     ]
@@ -239,20 +260,33 @@ async def analyze_discrepancies(
     for s in sales:
         key = s.dish_name.strip().lower()
         if key not in dish_agg:
-            dish_agg[key] = {"dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": 0.0, "total": 0.0}
+            dish_agg[key] = {
+                "dish_id": s.dish_id,
+                "dish_name": s.dish_name,
+                "quantity": 0.0,
+                "total": 0.0,
+            }
         dish_agg[key]["quantity"] += s.quantity
         dish_agg[key]["total"] += s.total
 
     actual_sales = [
-        {"date": week_start, "dish_id": d["dish_id"], "dish_name": d["dish_name"],
-         "quantity": d["quantity"], "total": d["total"]}
+        {
+            "date": week_start,
+            "dish_id": d["dish_id"],
+            "dish_name": d["dish_name"],
+            "quantity": d["quantity"],
+            "total": d["total"],
+        }
         for d in dish_agg.values()
     ]
-    records = await forecasts_repo.get_plan_fact(body.date, body.date, actual_sales, method=body.method)
+    records = await forecasts_repo.get_plan_fact(
+        body.date, body.date, actual_sales, method=body.method
+    )
 
     # MAPE / accuracy
     deviations = [
-        abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
+        abs(r.actual_quantity - r.predicted_quantity)
+        / max(r.actual_quantity, r.predicted_quantity)
         for r in records
         if r.actual_quantity > 0
     ]
@@ -336,7 +370,13 @@ async def get_accuracy_history(
         # Get actual sales for this date from DB
         sales = await sales_repo.get_sales_by_period(d, d)
         actual_sales = [
-            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
+            {
+                "date": s.date,
+                "dish_id": s.dish_id,
+                "dish_name": s.dish_name,
+                "quantity": s.quantity,
+                "total": s.total,
+            }
             for s in sales
         ]
         actual_total = sum(s.quantity for s in sales)
@@ -345,10 +385,14 @@ async def get_accuracy_history(
         ml_acc = None
 
         if "ml" in methods:
-            pf_records = await forecasts_repo.get_plan_fact(d, d, actual_sales, method="ml")
+            pf_records = await forecasts_repo.get_plan_fact(
+                d, d, actual_sales, method="ml"
+            )
             deviations = [
-                abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
-                for r in pf_records if r.actual_quantity > 0
+                abs(r.actual_quantity - r.predicted_quantity)
+                / max(r.actual_quantity, r.predicted_quantity)
+                for r in pf_records
+                if r.actual_quantity > 0
             ]
             mape = (sum(deviations) / len(deviations) * 100) if deviations else 0.0
             accuracy = max(0.0, 100.0 - mape)
@@ -358,14 +402,16 @@ async def get_accuracy_history(
                 dish_count=len(pf_records),
             )
 
-        records.append(AccuracyDayRecord(
-            date=d,
-            weekday=cal["weekday"],
-            is_holiday=cal["is_holiday"],
-            holiday_name=cal.get("holiday_name"),
-            ml=ml_acc,
-            actual_total=round(actual_total, 1),
-        ))
+        records.append(
+            AccuracyDayRecord(
+                date=d,
+                weekday=cal["weekday"],
+                is_holiday=cal["is_holiday"],
+                holiday_name=cal.get("holiday_name"),
+                ml=ml_acc,
+                actual_total=round(actual_total, 1),
+            )
+        )
 
     ml_accs = [r.ml.accuracy for r in records if r.ml]
     summary = AccuracyHistorySummary(
@@ -448,12 +494,28 @@ async def train_ml_models(
     return result
 
 
+@router.get("/inventory", response_model=InventoryResponse)
+async def get_inventory(
+    date: datetime.date = Query(...),
+    iiko_client: IikoClient = Depends(get_iiko_client),
+    products_repo: ProductsRepository = Depends(get_products_repo),
+    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    settings: Settings = Depends(get_settings),
+) -> InventoryResponse | JSONResponse:
+    try:
+        service = InventoryService(iiko_client, forecasts_repo, products_repo, settings)
+        return await service.get_weekly_inventory(date)
+    except ApiClientError as exc:
+        logger.error("Inventory API error: %s", exc)
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
 @router.get("/export")
 async def export_data(
     date: datetime.date = Query(...),
     method: str = Query("ml"),
     type: str = Query("forecast"),  # forecast | plan-fact
-    format: str = Query("json"),    # json | csv | xlsx
+    format: str = Query("json"),  # json | csv | xlsx
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
@@ -466,10 +528,15 @@ async def export_data(
     if type == "forecast":
         forecast = await forecasts_repo.get_forecast(date, method=method)
         if not forecast:
-            return JSONResponse(status_code=404, content={"detail": "Прогноз не найден"})
+            return JSONResponse(
+                status_code=404, content={"detail": "Прогноз не найден"}
+            )
         rows = [
-            {"dish_name": d.dish_name, "predicted_quantity": d.predicted_quantity,
-             "key_factors": ", ".join(d.key_factors)}
+            {
+                "dish_name": d.dish_name,
+                "predicted_quantity": d.predicted_quantity,
+                "key_factors": ", ".join(d.key_factors),
+            }
             for d in forecast.forecasts
         ]
         columns = ["dish_name", "predicted_quantity", "key_factors"]
@@ -477,27 +544,53 @@ async def export_data(
     elif type == "plan-fact":
         forecast = await forecasts_repo.get_forecast(date, method=method)
         if not forecast:
-            return JSONResponse(status_code=404, content={"detail": "Прогноз не найден"})
+            return JSONResponse(
+                status_code=404, content={"detail": "Прогноз не найден"}
+            )
         sales = await sales_repo.get_sales_by_period(date, date)
         actual_sales = [
-            {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity, "total": s.total}
+            {
+                "date": s.date,
+                "dish_id": s.dish_id,
+                "dish_name": s.dish_name,
+                "quantity": s.quantity,
+                "total": s.total,
+            }
             for s in sales
         ]
-        records = await forecasts_repo.get_plan_fact(date, date, actual_sales, method=method)
+        records = await forecasts_repo.get_plan_fact(
+            date, date, actual_sales, method=method
+        )
         rows = [
-            {"dish_name": r.dish_name, "predicted_quantity": r.predicted_quantity,
-             "actual_quantity": r.actual_quantity, "deviation_pct": r.deviation_pct}
+            {
+                "dish_name": r.dish_name,
+                "predicted_quantity": r.predicted_quantity,
+                "actual_quantity": r.actual_quantity,
+                "deviation_pct": r.deviation_pct,
+            }
             for r in records
         ]
-        columns = ["dish_name", "predicted_quantity", "actual_quantity", "deviation_pct"]
+        columns = [
+            "dish_name",
+            "predicted_quantity",
+            "actual_quantity",
+            "deviation_pct",
+        ]
     else:
-        return JSONResponse(status_code=400, content={"detail": f"Unknown type: {type}"})
+        return JSONResponse(
+            status_code=400, content={"detail": f"Unknown type: {type}"}
+        )
 
     filename = f"{type}_{date}_{method}"
 
     if format == "json":
         return JSONResponse(
-            content={"date": date.isoformat(), "method": method, "type": type, "data": rows},
+            content={
+                "date": date.isoformat(),
+                "method": method,
+                "type": type,
+                "data": rows,
+            },
             headers={"Content-Disposition": f'attachment; filename="{filename}.json"'},
         )
 
@@ -530,4 +623,6 @@ async def export_data(
             headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
         )
 
-    return JSONResponse(status_code=400, content={"detail": f"Unknown format: {format}"})
+    return JSONResponse(
+        status_code=400, content={"detail": f"Unknown format: {format}"}
+    )

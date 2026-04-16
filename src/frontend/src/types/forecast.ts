@@ -76,6 +76,24 @@ export interface DiscrepancyAnalysisResponse {
   accuracy_context: string;
 }
 
+// --- Inventory ---
+
+export interface InventoryItem {
+  product_id: string;
+  product_name: string;
+  stock: number;
+  need: number;
+  to_buy: number;
+  unit: string | null;
+}
+
+export interface InventoryResponse {
+  date: string;
+  week_start: string;
+  week_end: string;
+  items: InventoryItem[];
+}
+
 // --- Pages ---
 
-export type PageId = 'forecast';
+export type PageId = 'forecast' | 'inventory';

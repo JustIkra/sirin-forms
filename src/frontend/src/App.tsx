@@ -7,6 +7,7 @@ import PlanFactSection from './components/PlanFactSection';
 import ExportButtons from './components/ExportButtons';
 import Spinner from './components/Spinner';
 import ErrorMessage from './components/ErrorMessage';
+import InventoryPage from './components/InventoryPage';
 import { fetchForecast, fetchPlanFact, ForecastError } from './api/forecast';
 import type { DailyForecastResult, PlanFactResponse, PageId } from './types/forecast';
 
@@ -87,6 +88,8 @@ export default function App() {
           )}
         </>
       )}
+
+      {page === 'inventory' && <InventoryPage />}
 
     </Layout>
   );
