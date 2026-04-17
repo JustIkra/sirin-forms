@@ -16,6 +16,7 @@ from app.config import Settings
 from sqlalchemy import text
 
 from app.db import Base, WeatherRecord, create_engine, create_session_factory
+from app.utils.dt import today as today_msk
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ async def _startup_backfill(
     from app.services.backfill import BackfillService
     from app.services.data_collector import DataCollector
 
-    today = datetime.date.today()
+    today = today_msk()
 
     # 1. Sales backfill — if empty or stale
     try:

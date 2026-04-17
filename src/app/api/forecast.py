@@ -47,6 +47,7 @@ from app.services.context_formatter import (
 )
 from app.services.data_collector import DataCollector
 from app.services.ml_forecast import MLForecastService
+from app.utils.dt import today as today_msk
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ async def get_plan_fact(
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
     settings: Settings = Depends(get_settings),
 ) -> PlanFactResponse | JSONResponse:
-    today = datetime.date.today()
+    today = today_msk()
     # Weekly: compute week boundaries
     week_start = date - datetime.timedelta(days=date.weekday())
     week_end = week_start + datetime.timedelta(days=6)
@@ -229,7 +230,7 @@ async def analyze_discrepancies(
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
     openrouter_client: OpenRouterClient = Depends(get_openrouter_client),
 ) -> DiscrepancyAnalysisResponse | JSONResponse:
-    today = datetime.date.today()
+    today = today_msk()
     # Weekly boundaries
     week_start = body.date - datetime.timedelta(days=body.date.weekday())
     week_end = week_start + datetime.timedelta(days=6)
@@ -356,7 +357,7 @@ async def get_accuracy_history(
 ):
     from app.utils.calendar import get_calendar_context
 
-    today = datetime.date.today()
+    today = today_msk()
     date_from = today - datetime.timedelta(days=days)
 
     # Get all dates that have forecasts

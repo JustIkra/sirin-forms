@@ -18,6 +18,7 @@ from app.repositories.ml_models import MLModelsRepository
 from app.repositories.sales import SalesRepository
 from app.repositories.weather import WeatherRepository
 from app.services.data_collector import DataCollector
+from app.utils.dt import today as today_msk
 from app.services.features import (
     CATEGORICAL_FEATURES,
     FEATURE_NAMES,
@@ -88,7 +89,6 @@ def _format_weather(weather: DailyWeather | None) -> str | None:
 
 
 class MLForecastService:
-
     def __init__(
         self,
         data_collector: DataCollector,
@@ -122,7 +122,9 @@ class MLForecastService:
                 return cached
 
         # 2. Get top-50 dishes (reuse pre-fetched data or call iiko)
-        dishes = _dishes if _dishes is not None else await self._collector.collect_products()
+        dishes = (
+            _dishes if _dishes is not None else await self._collector.collect_products()
+        )
         if _recent_sales is not None:
             date_from = target_date - datetime.timedelta(days=30)
             date_to = target_date - datetime.timedelta(days=1)
@@ -143,7 +145,9 @@ class MLForecastService:
 
         active_dishes = [d for d in dishes if not _is_non_dish(d.name)]
         sold_names = set(dish_volume.keys())
-        active_dishes = [d for d in active_dishes if d.name.strip().lower() in sold_names]
+        active_dishes = [
+            d for d in active_dishes if d.name.strip().lower() in sold_names
+        ]
 
         # Deduplicate by name
         seen: dict[str, object] = {}
@@ -160,12 +164,19 @@ class MLForecastService:
             median_sales = statistics.median(all_totals)
             sales_threshold = median_sales * self._settings.min_sales_pct
             active_dishes = [
-                d for d in active_dishes
+                d
+                for d in active_dishes
                 if dish_volume.get(d.name.strip().lower(), 0) >= sales_threshold
             ]
 
-        active_dishes.sort(key=lambda d: dish_volume.get(d.name.strip().lower(), 0), reverse=True)
-        logger.info("ML menu: %d catalog → %d active (with sales, price, threshold)", len(dishes), len(active_dishes))
+        active_dishes.sort(
+            key=lambda d: dish_volume.get(d.name.strip().lower(), 0), reverse=True
+        )
+        logger.info(
+            "ML menu: %d catalog → %d active (with sales, price, threshold)",
+            len(dishes),
+            len(active_dishes),
+        )
 
         # Auto-train if no models exist
         models_count = await self._ml_models_repo.count_models()
@@ -174,7 +185,9 @@ class MLForecastService:
             await self.train_models()
 
         # Weekly: compute week boundaries
-        week_start = target_date - datetime.timedelta(days=target_date.weekday())  # Monday
+        week_start = target_date - datetime.timedelta(
+            days=target_date.weekday()
+        )  # Monday
         week_end = week_start + datetime.timedelta(days=6)  # Sunday
 
         # Fetch sales history for weekly features
@@ -185,26 +198,40 @@ class MLForecastService:
 
         # Fetch weather for the target week
         weather_records = await self._weather_repo.get_weather_range(
-            week_start - datetime.timedelta(days=90), week_end,
+            week_start - datetime.timedelta(days=90),
+            week_end,
         )
         weather_by_date = {w.date: w for w in weather_records}
 
         # 3. Per-dish: load model → predict weekly (or fallback)
         forecasts: list[DishForecast] = []
         for dish in active_dishes:
-            model_record = await self._ml_models_repo.get_latest_model(dish.id, dish.name)
-            qty, method = await self._predict_dish_weekly(
-                dish.id, dish.name, week_start, weather_by_date, model_record, total_daily_sales,
+            model_record = await self._ml_models_repo.get_latest_model(
+                dish.id, dish.name
             )
-            forecasts.append(DishForecast(
-                dish_id=dish.id,
-                dish_name=dish.name,
-                predicted_quantity=max(0.0, round(qty)),
-                confidence=0.7 if method == "ml" else 0.4,
-                key_factors=["ML-модель (HistGBR)" if method == "ml" else "Среднее за 4 недели (fallback)"],
-                price=dish.price,
-                prediction_method=method,
-            ))
+            qty, method = await self._predict_dish_weekly(
+                dish.id,
+                dish.name,
+                week_start,
+                weather_by_date,
+                model_record,
+                total_daily_sales,
+            )
+            forecasts.append(
+                DishForecast(
+                    dish_id=dish.id,
+                    dish_name=dish.name,
+                    predicted_quantity=max(0.0, round(qty)),
+                    confidence=0.7 if method == "ml" else 0.4,
+                    key_factors=[
+                        "ML-модель (HistGBR)"
+                        if method == "ml"
+                        else "Среднее за 4 недели (fallback)"
+                    ],
+                    price=dish.price,
+                    prediction_method=method,
+                )
+            )
 
         # Remove zero-quantity predictions
         forecasts = [f for f in forecasts if f.predicted_quantity > 0]
@@ -247,7 +274,9 @@ class MLForecastService:
         # Sales by ID — matches what model was trained on
         by_id = await self._sales_repo.get_sales_by_dish(dish_id, date_from, date_to)
         # Sales by name — broader (aggregates across duplicate iiko IDs)
-        by_name = await self._sales_repo.get_sales_by_dish_name(dish_name, date_from, date_to)
+        by_name = await self._sales_repo.get_sales_by_dish_name(
+            dish_name, date_from, date_to
+        )
 
         # Fallback uses name-based sales (more complete)
         fallback = self._cascading_fallback(by_name or by_id, target_date)
@@ -260,7 +289,9 @@ class MLForecastService:
         if model_record is not None:
             try:
                 model = joblib.load(io.BytesIO(model_record.model_blob))
-                features = build_prediction_features(target_date, by_id, weather, total_daily_sales)
+                features = build_prediction_features(
+                    target_date, by_id, weather, total_daily_sales
+                )
                 prediction = float(model.predict(features)[0])
                 # If model predicts ~0 but fallback shows sales, use fallback
                 if prediction < 0.5 and fallback > 0:
@@ -268,7 +299,9 @@ class MLForecastService:
                 return prediction, "ml"
             except Exception:
                 logger.warning(
-                    "ML prediction failed for %s, using fallback", dish_name, exc_info=True,
+                    "ML prediction failed for %s, using fallback",
+                    dish_name,
+                    exc_info=True,
                 )
 
         return fallback, "fallback"
@@ -287,7 +320,9 @@ class MLForecastService:
         hist_to = week_start - datetime.timedelta(days=1)
 
         by_id = await self._sales_repo.get_sales_by_dish(dish_id, hist_from, hist_to)
-        by_name = await self._sales_repo.get_sales_by_dish_name(dish_name, hist_from, hist_to)
+        by_name = await self._sales_repo.get_sales_by_dish_name(
+            dish_name, hist_from, hist_to
+        )
 
         # Weekly fallback: average of last 4 weeks
         sales = by_name or by_id
@@ -301,28 +336,37 @@ class MLForecastService:
         ]
         fallback = float(np.mean(prev_4w)) if any(v > 0 for v in prev_4w) else 0.0
 
-        if model_record is not None and model_record.feature_names != WEEKLY_FEATURE_NAMES:
+        if (
+            model_record is not None
+            and model_record.feature_names != WEEKLY_FEATURE_NAMES
+        ):
             model_record = None
 
         if model_record is not None:
             try:
                 model = joblib.load(io.BytesIO(model_record.model_blob))
                 features = build_weekly_prediction_features(
-                    week_start, by_id, weather_by_date, total_daily_sales,
+                    week_start,
+                    by_id,
+                    weather_by_date,
+                    total_daily_sales,
                 )
                 prediction = float(model.predict(features)[0])
                 return max(0.0, prediction), "ml"
             except Exception:
                 logger.warning(
                     "Weekly ML prediction failed for %s, using fallback",
-                    dish_name, exc_info=True,
+                    dish_name,
+                    exc_info=True,
                 )
 
         return fallback, "fallback"
 
-    async def _backfill_and_get_bias(self, target_date: datetime.date, *, _dishes=None) -> dict[str, float]:
+    async def _backfill_and_get_bias(
+        self, target_date: datetime.date, *, _dishes=None
+    ) -> dict[str, float]:
         """Backfill missing ML forecasts for X-14..X-1, compute per-dish bias with exponential decay."""
-        today = datetime.date.today()
+        today = today_msk()
         dates = [
             target_date - datetime.timedelta(days=i)
             for i in range(1, 15)
@@ -338,18 +382,29 @@ class MLForecastService:
 
         # Pre-fetch data once for all backfill dates (2 iiko sessions instead of 2*N)
         if dates_to_backfill:
-            dishes = _dishes if _dishes is not None else await self._collector.collect_products()
+            dishes = (
+                _dishes
+                if _dishes is not None
+                else await self._collector.collect_products()
+            )
             widest_lookback = (target_date - min(dates_to_backfill)).days + 30
-            all_sales = await self._collector.collect_recent_sales(target_date, days_back=widest_lookback)
+            all_sales = await self._collector.collect_recent_sales(
+                target_date, days_back=widest_lookback
+            )
             for d in dates_to_backfill:
                 logger.info("Backfilling ML forecast for %s", d)
                 try:
                     await self.generate_forecast(
-                        d, force=False, _backfill=False,
-                        _dishes=dishes, _recent_sales=all_sales,
+                        d,
+                        force=False,
+                        _backfill=False,
+                        _dishes=dishes,
+                        _recent_sales=all_sales,
                     )
                 except Exception:
-                    logger.warning("ML backfill failed for %s, skipping", d, exc_info=True)
+                    logger.warning(
+                        "ML backfill failed for %s, skipping", d, exc_info=True
+                    )
 
         # Collect plan-fact for all backfilled dates with day offsets
         dated_records: list[tuple[int, object]] = []  # (days_ago, record)
@@ -361,10 +416,17 @@ class MLForecastService:
             if not sales:
                 continue
             actual_sales = [
-                {"date": s.date, "dish_id": s.dish_id, "dish_name": s.dish_name, "quantity": s.quantity}
+                {
+                    "date": s.date,
+                    "dish_id": s.dish_id,
+                    "dish_name": s.dish_name,
+                    "quantity": s.quantity,
+                }
                 for s in sales
             ]
-            records = await self._forecasts_repo.get_plan_fact(d, d, actual_sales, method="ml")
+            records = await self._forecasts_repo.get_plan_fact(
+                d, d, actual_sales, method="ml"
+            )
             days_ago = (target_date - d).days
             for r in records:
                 dated_records.append((days_ago, r))
@@ -374,7 +436,9 @@ class MLForecastService:
 
         # Compute per-dish weighted signed error with exponential decay (half-life = 5 days)
         half_life = 5.0
-        dish_errors: dict[str, list[tuple[float, float]]] = defaultdict(list)  # name -> [(weight, error)]
+        dish_errors: dict[str, list[tuple[float, float]]] = defaultdict(
+            list
+        )  # name -> [(weight, error)]
         for days_ago, r in dated_records:
             denom = max(r.predicted_quantity, r.actual_quantity)
             if denom > 0:
@@ -391,7 +455,9 @@ class MLForecastService:
         return result
 
     @staticmethod
-    def _cascading_fallback(sales: list[SaleRecord], target_date: datetime.date) -> float:
+    def _cascading_fallback(
+        sales: list[SaleRecord], target_date: datetime.date
+    ) -> float:
         daily: dict[datetime.date, float] = {}
         for s in sales:
             daily[s.date] = daily.get(s.date, 0) + s.quantity
@@ -415,7 +481,7 @@ class MLForecastService:
 
     async def train_models(self, *, force: bool = False) -> dict:
         """Train ML models for active menu dishes (sold in last 90 days)."""
-        date_to = datetime.date.today()
+        date_to = today_msk()
         # Train on last 365 days — longer history dilutes signal with zeros
         date_from = date_to - datetime.timedelta(days=365)
         all_sales = await self._sales_repo.get_sales_by_period(date_from, date_to)
@@ -423,14 +489,17 @@ class MLForecastService:
         # Active menu = dishes with at least one sale in last 90 days
         cutoff_90d = date_to - datetime.timedelta(days=90)
         active_dish_ids: set[str] = {
-            s.dish_id for s in all_sales
+            s.dish_id
+            for s in all_sales
             if s.date >= cutoff_90d and not _is_non_dish(s.dish_name)
         }
         logger.info("Active menu (sold in last 90d): %d dishes", len(active_dish_ids))
 
         # Get weather data for the same period
         weather_records = await self._weather_repo.get_weather_range(date_from, date_to)
-        weather_by_date: dict[datetime.date, DailyWeather] = {w.date: w for w in weather_records}
+        weather_by_date: dict[datetime.date, DailyWeather] = {
+            w.date: w for w in weather_records
+        }
 
         # Get total daily sales for restaurant traffic feature
         daily_totals_rows = await self._sales_repo.get_daily_totals(date_from, date_to)
@@ -472,7 +541,9 @@ class MLForecastService:
                     continue
 
             try:
-                df = build_weekly_features_dataframe(dish_sales, weather_by_date, total_daily_sales)
+                df = build_weekly_features_dataframe(
+                    dish_sales, weather_by_date, total_daily_sales
+                )
                 X = df[WEEKLY_FEATURE_NAMES].values
                 y = df["target"].values
 
@@ -495,10 +566,17 @@ class MLForecastService:
                     for train_idx, test_idx in tscv.split(X):
                         model.fit(X[train_idx], y[train_idx])
                         y_pred_fold = model.predict(X[test_idx])
-                        mae_scores.append(float(np.mean(np.abs(y[test_idx] - y_pred_fold))))
+                        mae_scores.append(
+                            float(np.mean(np.abs(y[test_idx] - y_pred_fold)))
+                        )
                         denom = np.maximum(y[test_idx], y_pred_fold)
                         denom = np.where(denom == 0, 1.0, denom)
-                        acc_scores.append(float((1 - np.mean(np.abs(y[test_idx] - y_pred_fold) / denom)) * 100))
+                        acc_scores.append(
+                            float(
+                                (1 - np.mean(np.abs(y[test_idx] - y_pred_fold) / denom))
+                                * 100
+                            )
+                        )
                     mae_test = float(np.mean(mae_scores))
                     accuracy = float(np.mean(acc_scores))
                     test_size = len(y) // (n_splits + 1)
@@ -510,7 +588,9 @@ class MLForecastService:
                     mae_test = float(np.mean(np.abs(y[train_end:] - y_pred_test)))
                     denom = np.maximum(y[train_end:], y_pred_test)
                     denom = np.where(denom == 0, 1.0, denom)
-                    accuracy = float((1 - np.mean(np.abs(y[train_end:] - y_pred_test) / denom)) * 100)
+                    accuracy = float(
+                        (1 - np.mean(np.abs(y[train_end:] - y_pred_test) / denom)) * 100
+                    )
 
                 # Retrain on full data
                 model.fit(X, y)
@@ -536,10 +616,17 @@ class MLForecastService:
                 all_accuracies.append(accuracy)
                 logger.info(
                     "Trained model for %s: MAE=%.2f, accuracy=%.1f%%, samples=%d",
-                    dish_names[dish_id], mae_test, accuracy, len(y),
+                    dish_names[dish_id],
+                    mae_test,
+                    accuracy,
+                    len(y),
                 )
             except Exception:
-                logger.error("Failed to train model for %s", dish_names.get(dish_id, dish_id), exc_info=True)
+                logger.error(
+                    "Failed to train model for %s",
+                    dish_names.get(dish_id, dish_id),
+                    exc_info=True,
+                )
                 failed += 1
 
         avg_accuracy = round(np.mean(all_accuracies), 1) if all_accuracies else 0.0
