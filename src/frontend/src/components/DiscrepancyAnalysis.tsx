@@ -47,6 +47,7 @@ export default function DiscrepancyAnalysis({ data, loading, error, onRequestAna
       <div className="flex justify-center pt-2">
         <button
           onClick={onRequestAnalysis}
+          data-testid="discrepancy-trigger"
           className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04]
             px-5 py-3 text-sm font-medium text-slate-300 transition-all
             hover:bg-white/[0.08] hover:text-white hover:border-white/20"
@@ -95,7 +96,7 @@ export default function DiscrepancyAnalysis({ data, loading, error, onRequestAna
   if (!data) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="discrepancy-result">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Анализ расхождений (ИИ)</h3>
         <button

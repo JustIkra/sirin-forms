@@ -24,6 +24,7 @@ export default function Layout({ children, activePage, onNavigate }: Props) {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
+              data-testid={`nav-${item.id}`}
               onClick={() => onNavigate(item.id)}
               className={`flex w-full items-center gap-2 px-5 py-2.5 text-left text-sm transition-colors ${
                 item.id === activePage

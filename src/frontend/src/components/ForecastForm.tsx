@@ -41,7 +41,7 @@ export default function ForecastForm({ onSubmit, loading }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4" data-testid="forecast-form">
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-300">
           Неделя прогноза
@@ -51,6 +51,7 @@ export default function ForecastForm({ onSubmit, loading }: Props) {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            data-testid="forecast-date"
             className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
           />
           <span className="text-xs text-slate-400 tabular-nums">
@@ -64,6 +65,7 @@ export default function ForecastForm({ onSubmit, loading }: Props) {
           type="checkbox"
           checked={force}
           onChange={(e) => setForce(e.target.checked)}
+          data-testid="forecast-force"
           className="rounded border-white/10 bg-white/5 text-white"
         />
         Пересчитать (force)
@@ -71,6 +73,7 @@ export default function ForecastForm({ onSubmit, loading }: Props) {
       <button
         type="submit"
         disabled={loading}
+        data-testid="forecast-submit"
         className="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? 'Расчёт...' : 'Запустить прогноз'}

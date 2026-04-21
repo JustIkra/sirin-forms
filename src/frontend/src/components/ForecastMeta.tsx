@@ -53,7 +53,7 @@ export default function ForecastMeta({ result, summary }: Props) {
   const hasRevenue = summary && summary.total_actual_revenue > 0;
 
   return (
-    <div className="stat-grid">
+    <div className="stat-grid" data-testid="forecast-meta">
       <StatCell label={result.week_start ? "Неделя" : "Дата"}>
         <p className="text-xl font-bold text-white tabular-nums">
           {result.week_start

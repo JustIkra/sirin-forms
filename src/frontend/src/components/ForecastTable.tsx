@@ -143,16 +143,16 @@ export default function ForecastTable({ forecasts, planFact }: Props) {
     }`;
 
   return (
-    <div className="overflow-hidden glass-card">
+    <div className="overflow-hidden glass-card" data-testid="forecast-table-wrapper">
       {/* Filter bar */}
       <div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] px-4 py-2">
         {/* Left: qty / revenue */}
         {hasRevenue && (
           <div className="flex gap-1">
-            <button onClick={() => setView('quantity')} className={chipClass(view === 'quantity')}>
+            <button onClick={() => setView('quantity')} data-testid="view-quantity" className={chipClass(view === 'quantity')}>
               Количество
             </button>
-            <button onClick={() => setView('revenue')} className={chipClass(view === 'revenue')}>
+            <button onClick={() => setView('revenue')} data-testid="view-revenue" className={chipClass(view === 'revenue')}>
               Выручка
             </button>
           </div>
@@ -161,22 +161,22 @@ export default function ForecastTable({ forecasts, planFact }: Props) {
 
         {/* Right: method filter */}
         <div className="flex gap-1">
-          <button onClick={() => setMethodFilter('all')} className={chipClass(methodFilter === 'all')}>
+          <button onClick={() => setMethodFilter('all')} data-testid="filter-all" className={chipClass(methodFilter === 'all')}>
             Все ({forecasts.length})
           </button>
-          <button onClick={() => setMethodFilter('ml')} className={chipClass(methodFilter === 'ml')}>
+          <button onClick={() => setMethodFilter('ml')} data-testid="filter-ml" className={chipClass(methodFilter === 'ml')}>
             ML ({mlCount})
           </button>
-          <button onClick={() => setMethodFilter('fallback')} className={chipClass(methodFilter === 'fallback')}>
+          <button onClick={() => setMethodFilter('fallback')} data-testid="filter-fallback" className={chipClass(methodFilter === 'fallback')}>
             Fallback ({fbCount})
           </button>
         </div>
       </div>
 
-      <table className="min-w-full divide-y divide-white/[0.06]">
+      <table className="min-w-full divide-y divide-white/[0.06]" data-testid="forecast-table">
         <thead className="bg-white/[0.03]">
           <tr>
-            <th className={`${thClass} text-left`} onClick={() => toggleSort('name')}>
+            <th className={`${thClass} text-left`} data-testid="sort-name" onClick={() => toggleSort('name')}>
               Блюдо <SortIcon active={sortKey === 'name'} dir={sortDir} />
             </th>
             <th className={`${thClass} text-right`} onClick={() => toggleSort('forecast')}>
@@ -208,6 +208,8 @@ export default function ForecastTable({ forecasts, planFact }: Props) {
             return (
               <tr
                 key={`${r.dish_id}-${i}`}
+                data-testid="forecast-row"
+                data-method={r.prediction_method}
                 className={`hover:bg-white/[0.04] transition-colors ${isFallback && methodFilter === 'all' ? 'opacity-60' : ''}`}
               >
                 <td className="px-4 py-3 text-sm font-medium text-white">

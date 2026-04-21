@@ -1,6 +1,7 @@
 .worktrees/
 .ruff_cache
 docs
+repots/
 
 # Python
 __pycache__/
@@ -41,9 +42,24 @@ CLAUDE.md
 uv.lock
 .claude
 .pytest_cache
+.mcp*
+scripts/
+reports/
+prompts/
 
 # Frontend
 src/frontend/node_modules/
 src/frontend/dist/
+
+# Playwright
+src/frontend/test-results/
+src/frontend/playwright-report/
+src/frontend/blob-report/
+
+# QA artifacts
+reports/screenshots/
+reports/playwright-html/
+reports/pytest.json
+reports/playwright.json
 
 .memory-base
