@@ -93,9 +93,9 @@ async def _startup_backfill(
     session_factory,
     settings: Settings,
 ) -> None:
-    """On startup: backfill sales, weather, and train ML models if needed."""
+    """On startup: backfill sales, weather, train ML models, sync assembly charts if needed."""
     from sqlalchemy import func, select
-    from app.db import SaleRecordDb, MLModelRecord
+    from app.db import IngredientRecord, SaleRecordDb, MLModelRecord
     from app.repositories.sales import SalesRepository
     from app.repositories.weather import WeatherRepository
     from app.services.backfill import BackfillService
@@ -187,6 +187,36 @@ async def _startup_backfill(
             logger.info("ML models: %d exist, OK", models_count)
     except Exception:
         logger.warning("ML training failed", exc_info=True)
+
+    # 4. Assembly charts — sync from iiko if product_ingredients is empty
+    try:
+        async with session_factory() as session:
+            ing_count = await session.scalar(
+                select(func.count()).select_from(IngredientRecord),
+            )
+
+        if not ing_count:
+            logger.info("Assembly charts: table empty — syncing from iiko...")
+            from app.repositories.products import ProductsRepository
+
+            async with session_factory() as session:
+                collector = DataCollector(
+                    iiko_client=iiko_client,
+                    weather_client=weather_client,
+                    sales_repo=SalesRepository(session),
+                    products_repo=ProductsRepository(session),
+                    weather_repo=WeatherRepository(session),
+                    settings=settings,
+                )
+                # Гарантируем заполненность products (FK-зависимость)
+                await collector.collect_products()
+                synced = await collector.collect_assembly_charts()
+                await session.commit()
+                logger.info("Assembly charts: synced %d dishes", synced)
+        else:
+            logger.info("Assembly charts: %d ingredient rows, OK", ing_count)
+    except Exception:
+        logger.warning("Assembly charts sync failed", exc_info=True)
 
 
 app = FastAPI(

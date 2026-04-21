@@ -10,6 +10,8 @@ from typing import Any
 from app.clients.base import BaseHttpClient
 from app.exceptions import IikoApiError, IikoAuthError
 from app.models.iiko import (
+    AssemblyChart,
+    AssemblyChartItem,
     IikoDepartment,
     IikoOlapReport,
     IikoProduct,
@@ -19,6 +21,7 @@ from app.models.iiko import (
     OlapV2Request,
     SaleRecord,
 )
+from app.utils.dt import today as today_msk
 
 logger = logging.getLogger(__name__)
 
@@ -165,10 +168,29 @@ class IikoClient(BaseHttpClient):
                     product_type=item.get("type", "DISH").lower(),
                     price=item.get("defaultSalePrice"),
                     included_in_menu=item.get("defaultIncludedInMenu", False),
+                    main_unit=item.get("mainUnit"),
                 )
                 for item in items
                 if "id" in item and not item.get("deleted", False)
             ]
+
+    async def get_measure_units(self) -> dict[str, str]:
+        """GET /common/measureUnits — справочник {unit_uuid: name} (кг / л / шт / порц)."""
+        async with self._session() as token:
+            response = await self._request(
+                "GET",
+                "/common/measureUnits",
+                params={"key": token},
+                headers={"Accept": "application/xml"},
+            )
+            items = self._parse_xml_list(response, "measureUnits")
+        result: dict[str, str] = {}
+        for item in items:
+            uid = item.get("id")
+            name = item.get("name") or item.get("fullName")
+            if uid and name:
+                result[uid] = name
+        return result
 
     async def search_products(
         self,
@@ -416,6 +438,59 @@ class IikoClient(BaseHttpClient):
                 headers={"Accept": "application/xml"},
             )
             return self._parse_xml_list(response, "get_store_operations")
+
+    async def get_assembly_charts(
+        self,
+        date_from: datetime.date | None = None,
+    ) -> list[AssemblyChart]:
+        """GET /v2/assemblyCharts/getAll — тех.карты (рецептуры) блюд и полуфабрикатов."""
+        if date_from is None:
+            date_from = today_msk()
+        async with self._session() as token:
+            response = await self._request(
+                "GET",
+                "/v2/assemblyCharts/getAll",
+                params={"key": token, "dateFrom": date_from.isoformat()},
+            )
+            data = self._parse_json(response, "assemblyCharts/getAll")
+        if not isinstance(data, dict):
+            return []
+        charts: list[AssemblyChart] = []
+        for raw in data.get("assemblyCharts", []) or []:
+            if not isinstance(raw, dict):
+                continue
+            assembled_id = raw.get("assembledProductId")
+            if not assembled_id:
+                continue
+            items: list[AssemblyChartItem] = []
+            for it in raw.get("items", []) or []:
+                if not isinstance(it, dict):
+                    continue
+                pid = it.get("productId")
+                amount = it.get("amountMiddle")
+                if not pid or amount is None:
+                    continue
+                try:
+                    items.append(AssemblyChartItem(product_id=pid, amount=float(amount)))
+                except (TypeError, ValueError):
+                    continue
+            assembled_amount_raw = raw.get("assembledAmount")
+            try:
+                assembled_amount = float(assembled_amount_raw) if assembled_amount_raw else 1.0
+            except (TypeError, ValueError):
+                assembled_amount = 1.0
+            if assembled_amount <= 0:
+                assembled_amount = 1.0
+            charts.append(
+                AssemblyChart(
+                    assembled_product_id=assembled_id,
+                    date_from=raw.get("dateFrom") or None,
+                    date_to=raw.get("dateTo") or None,
+                    assembled_amount=assembled_amount,
+                    items=items,
+                )
+            )
+        return charts
 
     async def get_ingredient_entry(
         self,

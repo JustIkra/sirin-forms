@@ -495,6 +495,30 @@ async def train_ml_models(
     return result
 
 
+@router.post("/assembly-charts/sync")
+async def sync_assembly_charts(
+    iiko_client: IikoClient = Depends(get_iiko_client),
+    weather_client: WeatherClient = Depends(get_weather_client),
+    sales_repo: SalesRepository = Depends(get_sales_repo),
+    products_repo: ProductsRepository = Depends(get_products_repo),
+    weather_repo: WeatherRepository = Depends(get_weather_repo),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Принудительный ресинк тех.карт (рецептур) из iiko в product_ingredients."""
+    collector = DataCollector(
+        iiko_client=iiko_client,
+        weather_client=weather_client,
+        sales_repo=sales_repo,
+        products_repo=products_repo,
+        weather_repo=weather_repo,
+        settings=settings,
+    )
+    # Гарантируем заполненность products (FK-зависимость)
+    await collector.collect_products()
+    synced = await collector.collect_assembly_charts()
+    return {"synced_dishes": synced}
+
+
 @router.get("/inventory", response_model=InventoryResponse)
 async def get_inventory(
     date: datetime.date = Query(...),

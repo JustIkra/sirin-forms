@@ -46,6 +46,33 @@ class DataCollector:
         await self._products_repo.sync_products(products)
         return [p for p in products if p.product_type in self._FORECAST_PRODUCT_TYPES]
 
+    async def collect_assembly_charts(self) -> int:
+        """Тянет тех.карты из iiko и складывает в product_ingredients.
+
+        Требует, чтобы `products` уже были засинкнуты (FK-связь).
+        Резолвит единицы измерения через /common/measureUnits и mainUnit
+        на каждом продукте, передаёт в sync_assembly_charts.
+        Возвращает количество блюд, для которых применена актуальная карта.
+        """
+        charts = await self._iiko.get_assembly_charts()
+        products = await self._iiko.get_products()
+        units_map = await self._iiko.get_measure_units()
+        units_by_product: dict[str, str] = {}
+        for p in products:
+            if p.main_unit:
+                name = units_map.get(p.main_unit)
+                if name:
+                    units_by_product[p.id] = name
+
+        synced = await self._products_repo.sync_assembly_charts(
+            charts, units_by_product,
+        )
+        logger.info(
+            "Assembly charts: %d charts, %d units, applied %d dishes",
+            len(charts), len(units_by_product), synced,
+        )
+        return synced
+
     async def collect_historical_sales(
         self,
         target_date: datetime.date,

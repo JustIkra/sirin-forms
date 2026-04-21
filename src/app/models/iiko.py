@@ -35,6 +35,7 @@ class IikoProduct(BaseModel):
     product_type: ProductType
     price: float | None = None
     included_in_menu: bool = False
+    main_unit: str | None = None   # iiko: mainUnit — UUID единицы измерения
     ingredients: list[ProductIngredient] = []
 
 
@@ -87,3 +88,16 @@ class IikoOlapReport(BaseModel):
     date_from: datetime.date
     date_to: datetime.date
     data: list[dict]
+
+
+class AssemblyChartItem(BaseModel):
+    product_id: str  # iiko: productId
+    amount: float    # iiko: amountMiddle (per assembled_amount units)
+
+
+class AssemblyChart(BaseModel):
+    assembled_product_id: str                     # iiko: assembledProductId
+    date_from: datetime.date | None = None        # iiko: dateFrom
+    date_to: datetime.date | None = None          # iiko: dateTo (null => active)
+    assembled_amount: float = 1.0                 # iiko: assembledAmount (yield)
+    items: list[AssemblyChartItem] = []
