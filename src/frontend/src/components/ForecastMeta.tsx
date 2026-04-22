@@ -10,115 +10,125 @@ function formatRub(n: number): string {
 }
 
 function mapeColor(mape: number): string {
-  if (mape < 10) return 'text-green-400';
-  if (mape < 20) return 'text-blue-400';
-  if (mape < 30) return 'text-yellow-400';
-  return 'text-red-400';
+  if (mape < 10) return 'text-emerald-300';
+  if (mape < 20) return 'text-accent-500';
+  if (mape < 30) return 'text-amber-300';
+  return 'text-fact-red';
 }
 
 function accuracyColor(acc: number): string {
-  if (acc >= 90) return 'text-green-400';
-  if (acc >= 80) return 'text-blue-400';
-  if (acc >= 70) return 'text-yellow-400';
-  return 'text-red-400';
+  if (acc >= 90) return 'text-emerald-300';
+  if (acc >= 80) return 'text-accent-500';
+  if (acc >= 70) return 'text-amber-300';
+  return 'text-fact-red';
 }
 
-function revDeviationColor(predicted: number, actual: number): string {
-  if (predicted === 0) return 'text-slate-400';
-  const pct = Math.abs((actual - predicted) / predicted) * 100;
-  if (pct <= 10) return 'text-green-400';
-  if (pct <= 25) return 'text-yellow-400';
-  return 'text-red-400';
+function revDevPct(predicted: number, actual: number): number {
+  if (predicted === 0) return 0;
+  return ((actual - predicted) / predicted) * 100;
 }
 
-function StatCell({ label, children }: { label: string; children: React.ReactNode }) {
+function Cell({
+  label,
+  children,
+  wide = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
   return (
-    <div className="stat-cell">
-      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-        {label}
-      </span>
-      <div className="mt-2">{children}</div>
+    <div
+      className={`rounded-2xl bg-black/25 px-5 py-4 ${wide ? 'md:col-span-2' : ''}`}
+    >
+      <div className="eyebrow-light mb-2">{label}</div>
+      <div>{children}</div>
     </div>
   );
 }
 
 export default function ForecastMeta({ result, summary }: Props) {
-  const revDev =
-    summary && summary.total_predicted_revenue > 0
-      ? (summary.total_actual_revenue - summary.total_predicted_revenue) /
-        summary.total_predicted_revenue *
-        100
-      : 0;
-
-  const hasRevenue = summary && summary.total_actual_revenue > 0;
+  const hasSummary = summary && summary.dish_count > 0;
+  const hasRevenue = hasSummary && summary.total_actual_revenue > 0;
+  const revDev = hasSummary
+    ? revDevPct(summary.total_predicted_revenue, summary.total_actual_revenue)
+    : 0;
 
   return (
-    <div className="stat-grid" data-testid="forecast-meta">
-      <StatCell label={result.week_start ? "Неделя" : "Дата"}>
-        <p className="text-xl font-bold text-white tabular-nums">
+    <div
+      className="grid grid-cols-1 gap-3 md:grid-cols-3"
+      data-testid="forecast-meta"
+    >
+      <Cell label={result.week_start ? 'Неделя' : 'Дата'}>
+        <p className="text-lg font-semibold tabular-nums text-cream-100">
           {result.week_start
-            ? `${result.week_start.slice(5)} — ${(result.week_end ?? '').slice(5)}`
-            : result.date}
+            ? `${result.week_start.slice(5).replace('-', '.')} — ${(result.week_end ?? '').slice(5).replace('-', '.')}`
+            : result.date.split('-').reverse().join('.')}
         </p>
-      </StatCell>
+      </Cell>
 
-      <StatCell label="Погода">
-        <p className="text-sm font-semibold text-slate-200 leading-snug">
+      <Cell label="Погода">
+        <p className="text-sm leading-snug text-cream-100">
           {result.weather ?? 'Нет данных'}
         </p>
-      </StatCell>
+      </Cell>
 
-      <StatCell label="Праздник">
-        <p className={`text-xl font-bold ${result.is_holiday ? 'text-amber-400' : 'text-slate-500'}`}>
-          {result.is_holiday ? 'Да' : 'Нет'}
+      <Cell label="Праздник">
+        <p
+          className={`text-lg font-semibold ${
+            result.is_holiday ? 'text-amber-300' : 'text-ink-400'
+          }`}
+        >
+          {result.is_holiday ? 'ДА' : 'НЕТ'}
         </p>
-      </StatCell>
+      </Cell>
 
-      <StatCell label="Блюда">
-        <div className="flex items-end gap-3">
-          <span className="text-xl font-bold text-white tabular-nums">{result.forecasts.length}</span>
-          <span className="text-xs text-slate-400">
-            ML <span className="text-blue-400 font-semibold">{result.ml_count ?? 0}</span>
-            {' / '}
-            Fallback <span className="text-slate-500 font-semibold">{result.fallback_count ?? 0}</span>
-          </span>
-        </div>
-      </StatCell>
-
-      {summary && (
+      {hasSummary && (
         <>
-          <StatCell label="MAPE / Точность">
-            <div className="flex items-end gap-2">
-              <span className={`text-xl font-bold tabular-nums ${mapeColor(summary.mape)}`}>
+          <Cell label="Кол-во: план / факт">
+            <p className="text-lg font-semibold tabular-nums text-cream-100">
+              {summary.total_predicted}
+              <span className="px-1 text-ink-500">/</span>
+              {summary.total_actual}
+            </p>
+          </Cell>
+
+          <Cell label="MAPE / Точность">
+            <div className="flex items-baseline gap-2">
+              <span
+                className={`text-lg font-semibold tabular-nums ${mapeColor(summary.mape)}`}
+              >
                 {summary.mape}%
               </span>
-              <span className="text-slate-600 text-sm">/</span>
-              <span className={`text-xl font-bold tabular-nums ${accuracyColor(summary.accuracy)}`}>
+              <span className="text-ink-500">/</span>
+              <span
+                className={`text-lg font-semibold tabular-nums ${accuracyColor(summary.accuracy)}`}
+              >
                 {summary.accuracy}%
               </span>
             </div>
-          </StatCell>
-
-          <StatCell label="Кол-во: план / факт">
-            <p className="text-xl font-bold text-white tabular-nums">
-              {summary.total_predicted}
-              <span className="text-slate-600 font-normal"> / </span>
-              {summary.total_actual}
-            </p>
-          </StatCell>
+          </Cell>
 
           {hasRevenue && (
-            <StatCell label="Выручка: план / факт">
-              <p className="text-lg font-bold text-white tabular-nums leading-tight">
+            <Cell label="Выручка: план / факт" wide>
+              <p className="text-base font-semibold tabular-nums text-cream-100">
                 {formatRub(summary.total_predicted_revenue)}
-                <span className="text-slate-600 font-normal"> / </span>
-                {formatRub(summary.total_actual_revenue)} &#8381;
+                <span className="px-1 text-ink-500">/</span>
+                {formatRub(summary.total_actual_revenue)} ₽
               </p>
-              <p className={`mt-1 text-xs font-semibold tabular-nums ${revDeviationColor(summary.total_predicted_revenue, summary.total_actual_revenue)}`}>
+              <p
+                className={`mt-1 text-xs font-medium tabular-nums ${
+                  Math.abs(revDev) <= 10
+                    ? 'text-emerald-300'
+                    : Math.abs(revDev) <= 25
+                      ? 'text-amber-300'
+                      : 'text-fact-red'
+                }`}
+              >
                 {revDev > 0 ? '+' : ''}
                 {revDev.toFixed(1)}% отклонение
               </p>
-            </StatCell>
+            </Cell>
           )}
         </>
       )}

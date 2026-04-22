@@ -5,8 +5,9 @@ import { fetchInventory } from '../api/inventory';
 import InventoryTable from './InventoryTable';
 import Spinner from './Spinner';
 import ErrorMessage from './ErrorMessage';
+import Hero from './Hero';
+import DarkPanel from './DarkPanel';
 
-type Mode = 'day' | 'week';
 type Tab = 'all' | 'to_buy';
 
 function todayMSK(): string {
@@ -21,8 +22,12 @@ function formatWeekRange(start: string, end: string): string {
   return `${fmt(start)} — ${fmt(end)}`;
 }
 
+function formatDateRu(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+
 export default function InventoryPage() {
-  const [mode, setMode] = useState<Mode>('week');
   const [date, setDate] = useState(todayMSK);
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,117 +65,139 @@ export default function InventoryPage() {
 
   return (
     <>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gradient">Остатки и закупка</h2>
-        <p className="text-sm text-slate-400">
-          Складские остатки и прогноз закупки по ингредиентам
-        </p>
-      </div>
+      <div className="grid grid-cols-1 gap-10 pt-4 lg:grid-cols-2 lg:gap-16">
+        <Hero
+          eyebrow="ОСТАТКИ И ЗАКУПКА ДЛЯ РЕСТОРАНА"
+          title={
+            <>
+              Остатки под
+              <br />
+              контролем,
+              <br />
+              закупка вовремя
+            </>
+          }
+          description="Следите за складом по ключевым позициям и быстро понимайте, что заканчивается и что нужно заказать."
+          cta={{
+            label: loading ? 'Загрузка...' : 'Открыть остатки',
+            onClick: handleLoad,
+            disabled: loading,
+          }}
+        />
 
-      {/* День / Неделя */}
-      <div className="mb-5 flex gap-1 rounded-lg bg-white/[0.04] p-1 w-fit">
-        {([['week', 'Неделя'], ['day', 'День']] as const).map(([m, label]) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              mode === m
-                ? 'bg-white/[0.1] text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {mode === 'day' && (
-        <div className="glass-card p-12 text-center">
-          <p className="text-lg text-slate-400">В разработке</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Дневной режим остатков будет доступен позже
-          </p>
-        </div>
-      )}
-
-      {mode === 'week' && (
-        <>
-          {/* Форма */}
+        <DarkPanel eyebrow="ЭКРАН ОСТАТКОВ" windowChrome>
           <form
-            onSubmit={(e) => { e.preventDefault(); handleLoad(); }}
-            className="flex flex-wrap items-end gap-4 mb-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleLoad();
+            }}
+            className="flex flex-col gap-6"
           >
+            <header>
+              <div className="eyebrow-light mb-3">ОСТАТКИ И ЗАКУПКА ДЛЯ РЕСТОРАНА</div>
+              <h3 className="text-2xl font-semibold leading-tight text-cream-100">
+                Сначала остатки, потом закупка
+              </h3>
+              <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-400">
+                Выберите режим, укажите дату и запустите расчёт. После этого
+                система покажет остатки и позиции для заказа.
+              </p>
+            </header>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-300">
-                Дата
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                data-testid="inventory-date"
-                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              data-testid="inventory-load"
-              className="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? 'Загрузка...' : 'Загрузить'}
-            </button>
-          </form>
-
-          {loading && <Spinner />}
-          {error && <ErrorMessage message={error.message} status={error.status} />}
-
-          {data && !loading && (
-            <div className="space-y-4">
-              {/* Мета */}
-              <div className="flex items-center gap-4 text-sm text-slate-400">
-                <span>
-                  Неделя: {formatWeekRange(data.week_start, data.week_end)}
-                </span>
-                <span>
-                  Позиций: {data.items.length}
+              <div className="eyebrow-light mb-2">Дата</div>
+              <div className="inline-flex items-center gap-4 rounded-2xl bg-black/25 px-4 py-3">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  data-testid="inventory-date"
+                  className="bg-transparent text-base tabular-nums text-cream-100 outline-none [color-scheme:dark]"
+                />
+                <span className="hidden text-sm tabular-nums text-ink-400 md:inline" aria-hidden>
+                  {formatDateRu(date)}
                 </span>
               </div>
+            </div>
 
-              {/* Табы: Все / Нужно закупить */}
-              <div className="flex gap-2" data-testid="inventory-tabs">
-                {([
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-2xl bg-black/25 px-4 py-3">
+                <div className="eyebrow-light mb-1">Режим</div>
+                <div className="text-sm text-cream-100">Неделя</div>
+              </div>
+              <div className="rounded-2xl bg-black/25 px-4 py-3">
+                <div className="eyebrow-light mb-1">Результат</div>
+                <div className="text-sm text-cream-100">Таблица остатков</div>
+              </div>
+              <div className="rounded-2xl bg-black/25 px-4 py-3">
+                <div className="eyebrow-light mb-1">Выход</div>
+                <div className="text-sm text-cream-100">Остатки + закупка</div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                data-testid="inventory-load"
+                className="btn-accent"
+              >
+                {loading ? 'Загрузка...' : 'Загрузить остатки'}
+              </button>
+            </div>
+          </form>
+        </DarkPanel>
+      </div>
+
+      {loading && <Spinner />}
+      {error && <ErrorMessage message={error.message} status={error.status} />}
+
+      {data && !loading && (
+        <section className="panel mt-10 px-8 py-8 lg:px-10 lg:py-10">
+          <div className="eyebrow-light mb-2">ОСТАТКИ</div>
+          <h3 className="mb-2 text-2xl font-semibold text-cream-100">
+            Остатки и закупка
+          </h3>
+          <p className="mb-6 max-w-xl text-sm text-ink-400">
+            Складские остатки и прогноз закупки по ингредиентам.
+            Неделя {formatWeekRange(data.week_start, data.week_end)} · позиций {data.items.length}.
+          </p>
+
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div
+              className="inline-flex rounded-full bg-black/25 p-1"
+              data-testid="inventory-tabs"
+            >
+              {(
+                [
                   ['all', `Все (${data.items.length})`],
                   ['to_buy', `Нужно закупить (${toBuyCount})`],
-                ] as const).map(([t, label]) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    data-testid={`inventory-tab-${t.replace('_', '-')}`}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      tab === t
-                        ? 'bg-white/[0.1] text-white'
-                        : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div data-testid="inventory-table">
-                <InventoryTable
-                  items={filteredItems}
-                  emptyMessage={
-                    tab === 'to_buy'
-                      ? 'Все позиции в наличии'
-                      : 'Нет данных'
-                  }
-                />
-              </div>
+                ] as const
+              ).map(([t, label]) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  data-testid={`inventory-tab-${t.replace('_', '-')}`}
+                  className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wide transition-all ${
+                    tab === t
+                      ? 'bg-cream-100 text-ink-900 shadow-sm'
+                      : 'text-ink-400 hover:text-cream-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
-        </>
+          </div>
+
+          <div data-testid="inventory-table">
+            <InventoryTable
+              items={filteredItems}
+              emptyMessage={tab === 'to_buy' ? 'Все позиции в наличии' : 'Нет данных'}
+            />
+          </div>
+        </section>
       )}
     </>
   );

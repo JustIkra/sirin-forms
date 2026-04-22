@@ -1,27 +1,162 @@
 @import "tailwindcss";
 
+@theme {
+  --color-cream-50: #faf7f1;
+  --color-cream-100: #f6f2ea;
+  --color-cream-200: #efe8de;
+  --color-cream-300: #e6dccc;
+
+  --color-ink-900: #101419;
+  --color-ink-800: #1d2228;
+  --color-ink-700: #2a3038;
+  --color-ink-600: #3d434c;
+  --color-ink-500: #6b707a;
+  --color-ink-400: #9ba0aa;
+  --color-ink-300: #c3c6cd;
+
+  --color-accent-500: #4893ff;
+  --color-accent-600: #2969f3;
+
+  --color-fact-red: #ff5a4b;
+
+  --font-display: "Manrope", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+
+  --radius-panel: 35px;
+  --radius-chip: 999px;
+}
+
 :root {
-  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-cream: linear-gradient(160deg, #f6f2ea 0%, #efe8de 100%);
+  --bg-panel: linear-gradient(142deg, #1d2228 11%, #101419 100%);
+  --bg-accent: linear-gradient(131deg, #4893ff 0%, #2969f3 100%);
+  --shadow-panel: 0 10px 40px -10px rgba(16, 20, 25, 0.35);
+
+  /* legacy kept for unmigrated components */
+  --bg-card: rgba(255, 255, 255, 0.04);
   --border-card: rgba(255, 255, 255, 0.08);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
+}
+
+html, body, #root {
+  min-height: 100vh;
 }
 
 body {
   margin: 0;
   font-family: "Inter", system-ui, -apple-system, sans-serif;
-  background-color: #0a0a0a;
-  color: #e2e8f0;
+  background: var(--bg-cream);
+  background-attachment: fixed;
+  color: #1d2228;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+.bg-cream { background: var(--bg-cream); }
+.bg-panel { background: var(--bg-panel); }
+.bg-accent { background: var(--bg-accent); }
+
+.panel {
+  background: var(--bg-panel);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+  color: #f6f2ea;
+}
+
+.hero-title {
+  font-family: "Manrope", "Inter", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #101419;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b707a;
+}
+
+.eyebrow-light {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9ba0aa;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.15rem;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.18s ease;
+  cursor: pointer;
+}
+
+.chip-dark {
+  background: #1d2228;
+  color: #f6f2ea;
+}
+
+.chip-light {
+  background: transparent;
+  color: #6b707a;
+}
+
+.chip-light:hover {
+  background: rgba(16, 20, 25, 0.06);
+  color: #101419;
+}
+
+.chip-accent {
+  background: var(--bg-accent);
+  color: #ffffff;
+  box-shadow: 0 6px 16px -6px rgba(41, 105, 243, 0.55);
+}
+
+.btn-accent {
+  background: var(--bg-accent);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 0.75rem 1.75rem;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px -8px rgba(41, 105, 243, 0.6);
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-accent:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -8px rgba(41, 105, 243, 0.7);
+}
+
+.btn-accent:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* panel window-chrome dots */
+.dot-red   { background: #ff5a4b; }
+.dot-amber { background: #ffbe3d; }
+.dot-green { background: #2ed36b; }
+
+/* legacy glass-card kept for migration */
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
-  backdrop-filter: blur(12px);
   border-radius: 0.75rem;
 }
 
 .text-gradient {
-  background: linear-gradient(180deg, #fff 0%, #999 100%);
+  background: linear-gradient(180deg, #101419 0%, #3d434c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -31,16 +166,16 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: var(--border-card);
-  border: 1px solid var(--border-card);
-  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
   overflow: hidden;
 }
 
 .stat-cell {
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  padding: 1.25rem 1.5rem;
+  background: rgba(29, 34, 40, 0.92);
+  padding: 1.1rem 1.4rem;
+  color: #f6f2ea;
 }
 
 @media (max-width: 768px) {

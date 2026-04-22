@@ -5,7 +5,7 @@ test('inventory: загрузка недельных остатков + филь
   await page.goto('/');
 
   await page.getByTestId('nav-inventory').click();
-  await expect(page.getByRole('heading', { name: 'Остатки и закупка' })).toBeVisible();
+  await expect(page.getByTestId('inventory-load')).toBeVisible();
 
   await page.getByTestId('inventory-date').fill(todayMsk());
   await page.getByTestId('inventory-load').click();

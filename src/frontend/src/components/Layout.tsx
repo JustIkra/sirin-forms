@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import type { PageId } from '../types/forecast';
 
 const NAV_ITEMS: { id: PageId; label: string }[] = [
-  { id: 'forecast', label: 'Прогноз' },
   { id: 'inventory', label: 'Остатки' },
+  { id: 'trends', label: 'Тренды' },
+  { id: 'forecast', label: 'Прогноз' },
 ];
 
 interface Props {
@@ -14,30 +15,39 @@ interface Props {
 
 export default function Layout({ children, activePage, onNavigate }: Props) {
   return (
-    <div className="flex h-screen">
-      <aside className="flex w-56 flex-col border-r border-white/[0.06] bg-[#0f0f0f]">
-        <div className="border-b border-white/[0.06] px-5 py-4">
-          <h1 className="text-lg font-bold text-white">Гурман</h1>
-          <p className="text-xs text-slate-400">Аналитикс</p>
+    <div className="min-h-screen bg-cream">
+      <header className="mx-auto flex max-w-[1680px] items-center justify-between px-8 pt-6 pb-4 lg:px-12">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-xl font-semibold tracking-tight text-ink-900">Гурман</h1>
+          <span className="eyebrow">Аналитика</span>
         </div>
-        <nav className="flex-1 py-3">
+
+        <nav
+          className="flex items-center gap-1 rounded-full border border-ink-900/5 bg-white/50 p-1 backdrop-blur"
+          data-testid="top-nav"
+        >
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               data-testid={`nav-${item.id}`}
               onClick={() => onNavigate(item.id)}
-              className={`flex w-full items-center gap-2 px-5 py-2.5 text-left text-sm transition-colors ${
+              className={
                 item.id === activePage
-                  ? 'border-l-2 border-blue-400 bg-white/[0.08] font-medium text-white'
-                  : 'border-l-2 border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-white'
-              }`}
+                  ? 'chip chip-dark'
+                  : 'chip chip-light'
+              }
             >
               {item.label}
             </button>
           ))}
         </nav>
-      </aside>
-      <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-6">{children}</main>
+
+        <div className="w-[120px]" aria-hidden />
+      </header>
+
+      <main className="mx-auto max-w-[1680px] px-8 pb-16 pt-6 lg:px-12">
+        {children}
+      </main>
     </div>
   );
 }

@@ -13,7 +13,7 @@ export interface DailyForecastResult {
   weather: string | null;
   is_holiday: boolean;
   notes: string | null;
-  method: 'ml';
+  method: string;
   ml_count: number;
   fallback_count: number;
   week_start: string | null;
@@ -96,4 +96,5 @@ export interface InventoryResponse {
 
 // --- Pages ---
 
-export type PageId = 'forecast' | 'inventory';
+export type PageId = 'forecast' | 'trends' | 'inventory';
+export type ForecastMode = 'weekly' | 'daily';

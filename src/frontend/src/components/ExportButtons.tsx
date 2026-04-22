@@ -31,7 +31,7 @@ export default function ExportButtons({ date, method, type }: Props) {
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#0f172a',
+        backgroundColor: '#f6f2ea',
         ignoreElements: (el: Element) => el.classList.contains('no-print'),
       });
 
@@ -105,15 +105,17 @@ export default function ExportButtons({ date, method, type }: Props) {
   };
 
   return (
-    <span className="inline-flex gap-1 no-print">
+    <span className="inline-flex gap-2 no-print" data-testid="export-buttons">
       {FORMATS.map(({ label, format }) => (
         <button
           key={format}
+          type="button"
           onClick={() => handleDownload(format)}
           disabled={downloading === format}
-          className="rounded border border-white/10 px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
+          data-testid={`export-${format}`}
+          className="rounded-full bg-black/25 px-4 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-ink-300 uppercase transition-all hover:bg-black/40 hover:text-cream-100 disabled:opacity-50"
         >
-          {downloading === format ? '...' : label}
+          {downloading === format ? '…' : label}
         </button>
       ))}
     </span>
