@@ -7,7 +7,6 @@ interface Props {
   onSubmit: (date: string, force: boolean) => void;
   mode: ForecastMode;
   onModeChange: (mode: ForecastMode) => void;
-  eyebrow?: string;
   title?: string;
   description?: string;
 }
@@ -16,9 +15,8 @@ export default function ForecastForm({
   onSubmit,
   mode,
   onModeChange,
-  eyebrow = 'ПРОГНОЗ СПРОСА ДЛЯ РЕСТОРАНА',
   title = 'Сначала запуск, потом прогноз',
-  description = 'Выберите режим, укажите дату и запустите расчёт. После этого система раскроет таблицу по блюдам.',
+  description = 'Выберите режим, укажите дату и запустите расчёт. После запуска ниже раскрывается таблица по блюдам.',
 }: Props) {
   const today = todayMskDate();
 
@@ -58,23 +56,22 @@ export default function ForecastForm({
     <form
       id="forecast-form"
       onSubmit={handleSubmit}
-      className="flex flex-col gap-6"
+      className="flex flex-col gap-5"
       data-testid="forecast-form"
     >
-      <header>
-        <div className="eyebrow-light mb-3">{eyebrow}</div>
-        <h3 className="text-2xl font-semibold leading-tight text-cream-100">
+      <header className="flex flex-col gap-2">
+        <h3 className="text-[22px] font-semibold leading-tight text-cream-100">
           {title}
         </h3>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-400">
+        <p className="max-w-md text-[13px] leading-relaxed text-ink-400">
           {description}
         </p>
       </header>
 
-      <div>
-        <div className="eyebrow-light mb-2">Режим прогноза</div>
+      <div className="flex max-w-md flex-col gap-3">
+        <div className="eyebrow-light">Режим прогноза</div>
         <div
-          className="inline-flex gap-1 rounded-full bg-black/25 p-1"
+          className="grid w-full grid-cols-2 gap-1 rounded-full bg-black/25 p-1"
           data-testid="mode-toggle"
         >
           {(
@@ -89,9 +86,10 @@ export default function ForecastForm({
               onClick={() => onModeChange(m)}
               data-testid={`mode-${m}`}
               className={
-                mode === m
-                  ? 'chip chip-accent'
-                  : 'chip text-ink-400 hover:text-cream-100'
+                'chip w-full justify-center !px-7 !py-2.5 !text-[14px] ' +
+                (mode === m
+                  ? 'chip-accent'
+                  : 'text-ink-400 hover:text-cream-100')
               }
             >
               {label}
@@ -100,15 +98,17 @@ export default function ForecastForm({
         </div>
       </div>
 
-      <DatePickerPopover
-        mode={mode}
-        selectedDay={selectedDay}
-        selectedWeekMonday={selectedWeekMonday}
-        onSelectDay={setSelectedDay}
-        onSelectWeekMonday={setSelectedWeekMonday}
-        label={{ daily: 'Дата прогноза', weekly: 'Неделя прогноза' }}
-        testIdPrefix="forecast-date"
-      />
+      <div className="max-w-md">
+        <DatePickerPopover
+          mode={mode}
+          selectedDay={selectedDay}
+          selectedWeekMonday={selectedWeekMonday}
+          onSelectDay={setSelectedDay}
+          onSelectWeekMonday={setSelectedWeekMonday}
+          label={{ daily: 'Дата прогноза', weekly: 'Неделя прогноза' }}
+          testIdPrefix="forecast-date"
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <InfoCell label="Результат" value="Таблица по блюдам" />
@@ -118,16 +118,16 @@ export default function ForecastForm({
 
       <label
         className={
-          'flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-black/25 px-5 py-4 ' +
+          'flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-black/25 px-5 py-3.5 ' +
           'transition-colors hover:bg-black/35 ' +
           'has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent-500/50'
         }
       >
         <span className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium text-cream-100">
+          <span className="text-[13px] font-medium text-cream-100">
             Пересчитать заново
           </span>
-          <span className="text-xs leading-relaxed text-ink-400">
+          <span className="text-[11px] leading-relaxed text-ink-400">
             Игнорировать кэш и запустить расчёт с нуля
           </span>
         </span>
@@ -162,9 +162,9 @@ export default function ForecastForm({
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-black/25 px-4 py-3">
-      <div className="eyebrow-light mb-1">{label}</div>
-      <div className="text-sm text-cream-100">{value}</div>
+    <div className="rounded-2xl bg-black/25 px-4 py-3.5">
+      <div className="eyebrow-light mb-2">{label}</div>
+      <div className="text-[13px] text-cream-100">{value}</div>
     </div>
   );
 }

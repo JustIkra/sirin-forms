@@ -125,7 +125,7 @@ export default function App() {
     <Layout activePage={page} onNavigate={setPage}>
       {page === 'forecast' && (
         <>
-          <div className="grid grid-cols-1 gap-10 pt-4 lg:grid-cols-2 lg:gap-16">
+          <div className="grid grid-cols-1 items-start gap-10 pt-6 lg:grid-cols-2 lg:gap-16">
             <Hero
               eyebrow="ПРОГНОЗ СПРОСА ДЛЯ РЕСТОРАНА"
               title={
@@ -137,11 +137,10 @@ export default function App() {
                   каждой смены
                 </>
               }
-              description={
-                mode === 'daily'
-                  ? 'Дневной прогноз для смены: выбирайте дату, запускайте расчёт и получайте результат. Один экран для запуска, ниже — таблица по блюдам.'
-                  : 'Недельный прогноз для ресторана: выбирайте режим, запускайте расчёт и получайте результат. Один экран для запуска, ниже — таблица по блюдам, количеству и факторам спроса.'
-              }
+              paragraphs={[
+                'Дневной и недельный прогноз для ресторана: выбирайте режим, запускайте расчёт и получайте результат.',
+                'Один экран для запуска, а ниже — таблица по блюдам, количеству и факторам спроса.',
+              ]}
               secondary={
                 <div>
                   <button
@@ -157,7 +156,7 @@ export default function App() {
               }
             />
 
-            <DarkPanel eyebrow="ЭКРАН ЗАПУСКА" windowChrome>
+            <DarkPanel eyebrow="ПРОГНОЗ СПРОСА ДЛЯ РЕСТОРАНА" windowChrome>
               <ForecastForm
                 onSubmit={handleSubmit}
                 mode={mode}
@@ -176,11 +175,11 @@ export default function App() {
               id={mode === 'weekly' ? 'print-area-forecast' : 'print-area-daily'}
               className="panel mt-10 px-8 py-8 lg:px-10 lg:py-10"
             >
-              <div className="eyebrow-light mb-2">РАСКРЫТЫЙ ПРОГНОЗ</div>
-              <h3 className="mb-2 text-2xl font-semibold text-cream-100">
+              <div className="eyebrow-light mb-3">РАСКРЫТЫЙ ПРОГНОЗ</div>
+              <h3 className="mb-3 text-[26px] font-semibold leading-[1.15] text-cream-100">
                 Прогноз по блюдам на выбранный период
               </h3>
-              <p className="mb-6 max-w-xl text-sm text-ink-400">
+              <p className="mb-7 max-w-xl text-[15px] leading-[1.55] text-ink-400">
                 После запуска система показывает позиции меню, ожидаемое количество
                 и факторы спроса, чтобы быстрее планировать закупки и работу кухни.
               </p>

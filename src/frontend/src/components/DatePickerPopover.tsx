@@ -13,9 +13,9 @@ import {
   type DateRange,
   type Modifiers,
 } from 'react-day-picker';
-import { addDays, addWeeks, format, isSameDay } from 'date-fns';
+import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { mondayOf, sundayOf, todayMskDate } from '../utils/date';
+import { mondayOf, sundayOf } from '../utils/date';
 
 function formatDailyTrigger(d: Date): string {
   return format(d, 'd MMM yyyy', { locale: ru });
@@ -28,32 +28,7 @@ function formatWeeklyTrigger(mon: Date): string {
   return `${left} – ${right}`;
 }
 
-// ---------- quick-chip configs ----------
-
 type DatePickerMode = 'daily' | 'weekly';
-
-interface QuickChip {
-  id: string;
-  label: string;
-  /** Given anchor (today for daily, this-monday for weekly), produce target date. */
-  resolve: (anchor: Date) => Date;
-}
-
-const DAILY_CHIPS: readonly QuickChip[] = [
-  { id: 'today', label: 'Сегодня', resolve: (a) => a },
-  { id: 'yesterday', label: 'Вчера', resolve: (a) => addDays(a, -1) },
-  { id: 'tomorrow', label: 'Завтра', resolve: (a) => addDays(a, 1) },
-  { id: 'plus-week', label: 'Через неделю', resolve: (a) => addDays(a, 7) },
-  { id: 'minus-week', label: '—1 неделя', resolve: (a) => addDays(a, -7) },
-] as const;
-
-const WEEKLY_CHIPS: readonly QuickChip[] = [
-  { id: 'this', label: 'Эта неделя', resolve: (a) => a },
-  { id: 'prev', label: 'Прошлая неделя', resolve: (a) => addWeeks(a, -1) },
-  { id: 'next', label: 'Следующая неделя', resolve: (a) => addWeeks(a, 1) },
-  { id: 'minus2', label: '—2 недели', resolve: (a) => addWeeks(a, -2) },
-  { id: 'minus4', label: '—4 недели', resolve: (a) => addWeeks(a, -4) },
-] as const;
 
 // ---------- DatePickerPopover (public component) ----------
 
@@ -80,8 +55,6 @@ export default function DatePickerPopover({
   label,
   testIdPrefix = 'forecast-date',
 }: Props) {
-  const today = useMemo(() => todayMskDate(), []);
-
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -176,49 +149,30 @@ export default function DatePickerPopover({
     }
   };
 
-  // Quick-chip config.
-  const chipsDef = mode === 'weekly' ? WEEKLY_CHIPS : DAILY_CHIPS;
-  const anchor = mode === 'weekly' ? mondayOf(today) : today;
-
-  const activeChipId = useMemo(() => {
-    const current = mode === 'weekly' ? selectedWeekMonday : selectedDay;
-    for (const chip of chipsDef) {
-      const target =
-        mode === 'weekly' ? mondayOf(chip.resolve(anchor)) : chip.resolve(anchor);
-      if (isSameDay(target, current)) return chip.id;
-    }
-    return null;
-  }, [chipsDef, mode, anchor, selectedDay, selectedWeekMonday]);
-
-  const handleChipClick = (chip: QuickChip) => {
-    const target = chip.resolve(anchor);
-    if (mode === 'weekly') {
-      onSelectWeekMonday(mondayOf(target));
-    } else {
-      onSelectDay(target);
-    }
-  };
-
-  // Default DayPicker classes + our dark overrides.
+  // Default DayPicker classes + our dark overrides. The grid stretches to fill
+  // the popover (w-full + table-fixed → equal-width columns), but the actual
+  // day buttons stay locked at 36×36 and centered inside each cell — so range
+  // backgrounds form an unbroken pill across the row while the clickable
+  // targets keep their circular shape regardless of popover width.
   const dp = getDefaultClassNames();
   const classNames = {
-    root: `${dp.root ?? ''} text-cream-100 font-sans px-3 pb-3 pt-2`,
+    root: `${dp.root ?? ''} text-cream-100 font-sans p-4`,
     months: `${dp.months ?? ''}`,
     month: `${dp.month ?? ''} p-0`,
-    month_caption: `${dp.month_caption ?? ''} flex items-center justify-center px-1 pb-3 pt-1`,
+    month_caption: `${dp.month_caption ?? ''} flex h-9 items-center justify-center pb-3`,
     caption_label: `${dp.caption_label ?? ''} text-[13px] font-semibold tracking-[0.02em] text-cream-100 capitalize`,
     nav: `${dp.nav ?? ''} flex items-center gap-1`,
     button_previous: `${dp.button_previous ?? ''} inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-white/[0.06] hover:text-cream-100`,
     button_next: `${dp.button_next ?? ''} inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-white/[0.06] hover:text-cream-100`,
     chevron: `${dp.chevron ?? ''} fill-current`,
-    month_grid: `${dp.month_grid ?? ''} border-separate border-spacing-0`,
+    month_grid: `${dp.month_grid ?? ''} w-full table-fixed border-separate border-spacing-0`,
     weekdays: `${dp.weekdays ?? ''}`,
-    weekday: `${dp.weekday ?? ''} px-0 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
-    week_number_header: `${dp.week_number_header ?? ''} px-0 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
-    week_number: `${dp.week_number ?? ''} px-1 text-center text-[10px] font-mono text-ink-500`,
+    weekday: `${dp.weekday ?? ''} h-8 text-center align-middle text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
+    week_number_header: `${dp.week_number_header ?? ''} h-8 text-center align-middle text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
+    week_number: `${dp.week_number ?? ''} h-9 text-center align-middle text-[10px] font-mono text-ink-500`,
     week: `${dp.week ?? ''}`,
-    day: `${dp.day ?? ''} p-0 text-[13px] text-cream-100 tabular-nums`,
-    day_button: `${dp.day_button ?? ''} inline-flex h-9 w-9 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500`,
+    day: `${dp.day ?? ''} h-9 p-0 text-center align-middle text-[13px] text-cream-100 tabular-nums`,
+    day_button: `${dp.day_button ?? ''} mx-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500`,
     today: `${dp.today ?? ''} font-bold text-accent-500`,
     selected: `${dp.selected ?? ''} rdp-sirin-selected`,
     range_start: `${dp.range_start ?? ''} rdp-sirin-range-start`,
@@ -257,9 +211,9 @@ export default function DatePickerPopover({
         };
 
   // ---------- Portal positioning ----------
-  const POPOVER_WIDTH = 360;
+  const POPOVER_WIDTH = 332;
   const POPOVER_GAP = 8;
-  const POPOVER_HEIGHT_FALLBACK = 520;
+  const POPOVER_HEIGHT_FALLBACK = 360;
 
   const [coords, setCoords] = useState<{
     top: number;
@@ -337,37 +291,6 @@ export default function DatePickerPopover({
         className="hidden"
       />
 
-      {/* Quick chips */}
-      <div className="border-b border-white/[0.05] p-4">
-        <div
-          className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-400"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          Быстрый выбор
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {chipsDef.map((chip) => {
-            const isActive = activeChipId === chip.id;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                onClick={() => handleChipClick(chip)}
-                aria-pressed={isActive}
-                data-testid={`${testIdPrefix}-chip-${chip.id}`}
-                className={
-                  isActive
-                    ? 'chip chip-accent !px-3 !py-1.5 !text-[12px]'
-                    : 'chip !px-3 !py-1.5 !text-[12px] bg-white/[0.04] text-ink-300 hover:bg-white/[0.08] hover:text-cream-100'
-                }
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* DayPicker calendar */}
       <div className="rdp-sirin-wrapper">
         <DayPicker
@@ -398,8 +321,7 @@ export default function DatePickerPopover({
   );
 
   return (
-    <div className="relative w-full max-w-md">
-      <div className="eyebrow-light mb-2">{activeLabel}</div>
+    <div className="relative w-full">
       <button
         ref={triggerRef}
         type="button"
@@ -413,7 +335,7 @@ export default function DatePickerPopover({
         }
         data-testid={`${testIdPrefix}-trigger`}
         className={
-          'group inline-flex items-center gap-3 rounded-full bg-black/25 px-5 py-3 text-left transition-all ' +
+          'group flex w-full items-center gap-3 rounded-full bg-black/25 px-5 py-3 text-left transition-all ' +
           'hover:bg-black/35 ' +
           (open
             ? 'ring-1 ring-accent-500/60 shadow-[0_0_0_4px_rgba(72,147,255,0.08)]'
@@ -422,20 +344,20 @@ export default function DatePickerPopover({
         style={{ fontFamily: 'var(--font-sans)' }}
       >
         <span
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-500/15 text-accent-500"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-500/15 text-accent-500"
           aria-hidden
         >
           <CalendarIcon />
         </span>
-        <span className="flex flex-col leading-tight">
+        <span className="flex flex-1 flex-col gap-0.5 leading-tight">
           <span
-            className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-400"
+            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             {triggerEyebrow}
           </span>
           <span
-            className="text-base font-medium tabular-nums text-cream-100"
+            className="text-[16px] font-semibold tabular-nums text-cream-100"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             {triggerMain}
@@ -463,6 +385,45 @@ export default function DatePickerPopover({
         typeof document !== 'undefined' &&
         createPortal(popoverContent, document.body)}
     </div>
+  );
+}
+
+// ---------- Icons ----------
+
+function CalendarIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 
@@ -561,41 +522,3 @@ const SIRIN_DP_STYLES = `
 }
 `;
 
-// ---------- Icons ----------
-
-function CalendarIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
