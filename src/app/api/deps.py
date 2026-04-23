@@ -7,6 +7,7 @@ from app.clients.iiko import IikoClient
 from app.clients.openrouter import OpenRouterClient
 from app.clients.weather import WeatherClient
 from app.repositories.forecasts import ForecastsRepository
+from app.repositories.menu_snapshots import MenuSnapshotsRepository
 from app.repositories.ml_models import MLModelsRepository
 from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
@@ -65,3 +66,9 @@ async def get_ml_models_repo(
     session: AsyncSession = Depends(get_db_session),
 ) -> MLModelsRepository:
     return MLModelsRepository(session)
+
+
+async def get_menu_snapshots_repo(
+    session: AsyncSession = Depends(get_db_session),
+) -> MenuSnapshotsRepository:
+    return MenuSnapshotsRepository(session)

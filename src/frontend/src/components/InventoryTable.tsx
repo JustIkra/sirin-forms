@@ -62,54 +62,56 @@ export default function InventoryTable({ items, emptyMessage }: Props) {
     'px-5 py-4 text-[10px] font-semibold tracking-[0.18em] text-ink-400 uppercase cursor-pointer select-none hover:text-cream-100 transition-colors';
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-black/20">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-white/5">
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                onClick={() => toggleSort(col.key)}
-                className={`${th} ${col.align}`}
-              >
-                {col.label}
-                <SortIcon active={sortKey === col.key} dir={sortDir} />
+    <div className="rounded-2xl bg-black/20">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] table-auto">
+          <thead>
+            <tr className="border-b border-white/5">
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => toggleSort(col.key)}
+                  className={`${th} ${col.align} whitespace-nowrap`}
+                >
+                  {col.label}
+                  <SortIcon active={sortKey === col.key} dir={sortDir} />
+                </th>
+              ))}
+              <th className="px-5 py-4 text-left text-[10px] font-semibold tracking-[0.18em] text-ink-400 uppercase whitespace-nowrap">
+                Ед.
               </th>
-            ))}
-            <th className="px-5 py-4 text-left text-[10px] font-semibold tracking-[0.18em] text-ink-400 uppercase">
-              Ед.
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((item) => (
-            <tr
-              key={item.product_id}
-              className="border-b border-white/[0.04] transition-colors last:border-0 hover:bg-white/[0.03]"
-            >
-              <td className="px-5 py-4 text-sm font-medium text-cream-100">
-                {item.product_name}
-              </td>
-              <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100">
-                {formatNum(item.stock)}
-              </td>
-              <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100">
-                {formatNum(item.need)}
-              </td>
-              <td
-                className={`px-5 py-4 text-right text-sm font-medium tabular-nums ${
-                  item.to_buy > 0 ? 'text-accent-500' : 'text-ink-500'
-                }`}
-              >
-                {formatNum(item.to_buy)}
-              </td>
-              <td className="px-5 py-4 text-sm text-ink-500">
-                {item.unit ?? '—'}
-              </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.map((item) => (
+              <tr
+                key={item.product_id}
+                className="border-b border-white/[0.04] transition-colors last:border-0 hover:bg-white/[0.03]"
+              >
+                <td className="px-5 py-4 text-sm font-medium text-cream-100 break-words">
+                  {item.product_name}
+                </td>
+                <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100 whitespace-nowrap">
+                  {formatNum(item.stock)}
+                </td>
+                <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100 whitespace-nowrap">
+                  {formatNum(item.need)}
+                </td>
+                <td
+                  className={`px-5 py-4 text-right text-sm font-medium tabular-nums whitespace-nowrap ${
+                    item.to_buy > 0 ? 'text-accent-500' : 'text-ink-500'
+                  }`}
+                >
+                  {formatNum(item.to_buy)}
+                </td>
+                <td className="px-5 py-4 text-sm text-ink-500 whitespace-nowrap">
+                  {item.unit ?? '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

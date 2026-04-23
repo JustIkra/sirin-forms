@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import type { DishForecast, PlanFactRecord } from '../types/forecast';
+import type { DishForecast, DishIngredient, PlanFactRecord } from '../types/forecast';
 
 interface Props {
   forecasts: DishForecast[];
@@ -15,6 +15,20 @@ type SortDir = 'asc' | 'desc';
 
 function formatRub(n: number): string {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+}
+
+function formatNum(n: number): string {
+  if (n === 0) return '0';
+  if (Number.isInteger(n)) return n.toLocaleString('ru-RU');
+  return n.toLocaleString('ru-RU', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 3,
+  });
+}
+
+function formatAmount(amount: number, unit: string | null): string {
+  const num = formatNum(amount);
+  return unit ? `${num} ${unit}` : num;
 }
 
 function deviationColor(pct: number): string {
@@ -40,7 +54,7 @@ interface MergedRow {
   actual_revenue: number | null;
   deviation_pct: number | null;
   revenue_deviation_pct: number | null;
-  key_factors: string[];
+  ingredients: DishIngredient[];
   prediction_method: string;
 }
 
@@ -54,6 +68,7 @@ export default function ForecastTable({
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('forecast');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const hasFact = planFact && planFact.length > 0;
   const isRev = view === 'revenue';
@@ -94,7 +109,7 @@ export default function ForecastTable({
       actual_revenue: pf ? pf.actual_revenue : null,
       deviation_pct: pf ? pf.deviation_pct : null,
       revenue_deviation_pct: pf ? pf.revenue_deviation_pct : null,
-      key_factors: f.key_factors,
+      ingredients: f.ingredients ?? [],
       prediction_method: f.prediction_method,
     };
   });
@@ -147,6 +162,10 @@ export default function ForecastTable({
       setSortDir(key === 'name' ? 'asc' : 'desc');
       return key;
     });
+  }, []);
+
+  const toggleExpand = useCallback((dishId: string) => {
+    setExpanded((prev) => ({ ...prev, [dishId]: !prev[dishId] }));
   }, []);
 
   const chip = (active: boolean, extra = '') =>
@@ -231,7 +250,9 @@ export default function ForecastTable({
               >
                 Блюдо <SortIcon active={sortKey === 'name'} dir={sortDir} />
               </th>
-              <th className={`${th} text-left`}>Факторы</th>
+              <th className={`${th} text-left cursor-default hover:text-ink-400`}>
+                Ингредиенты
+              </th>
               <th
                 className={`${th} text-right`}
                 onClick={() => toggleSort('forecast')}
@@ -271,6 +292,11 @@ export default function ForecastTable({
               const factVal = isRev ? r.actual_revenue : r.actual_quantity;
               const dev = isRev ? r.revenue_deviation_pct : r.deviation_pct;
               const isFallback = r.prediction_method === 'fallback';
+              const isExpanded = !!expanded[r.dish_id];
+              const ingredients = r.ingredients;
+              const hasShortage = ingredients.some((ing) => ing.shortage > 0);
+              const firstIng = ingredients[0];
+              const extraCount = Math.max(0, ingredients.length - 1);
 
               return (
                 <tr
@@ -287,10 +313,100 @@ export default function ForecastTable({
                       {isFallback ? 'Fallback (эвристика)' : 'ML-модель (HistGBR)'}
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-sm text-ink-400">
-                    {r.key_factors.join(', ')}
+                  <td
+                    className="px-5 py-4 text-sm text-ink-400 align-top cursor-pointer select-none"
+                    data-testid="ingredients-cell"
+                    data-expanded={isExpanded}
+                    onClick={() =>
+                      ingredients.length > 0 && toggleExpand(r.dish_id)
+                    }
+                  >
+                    {ingredients.length === 0 ? (
+                      <span className="text-ink-500">—</span>
+                    ) : isExpanded ? (
+                      <ul
+                        className="flex flex-col gap-1"
+                        data-testid="ingredients-list"
+                      >
+                        {ingredients.map((ing) => {
+                          const short = ing.shortage > 0;
+                          return (
+                            <li
+                              key={ing.product_id}
+                              className="flex items-baseline justify-between gap-3"
+                            >
+                              <span
+                                className={`truncate ${
+                                  short ? 'text-fact-red' : 'text-cream-100'
+                                }`}
+                              >
+                                {short && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-fact-red align-middle"
+                                  />
+                                )}
+                                {ing.name}
+                              </span>
+                              <span className="flex flex-col items-end tabular-nums">
+                                <span
+                                  className={
+                                    short ? 'text-fact-red' : 'text-ink-400'
+                                  }
+                                >
+                                  {formatAmount(ing.total_amount, ing.unit)}
+                                </span>
+                                {short && (
+                                  <span className="text-[11px] text-fact-red">
+                                    Докупить:{' '}
+                                    {formatAmount(ing.shortage, ing.unit)}
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {hasShortage && (
+                          <span
+                            aria-hidden="true"
+                            data-testid="ingredients-shortage-dot"
+                            className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-fact-red"
+                          />
+                        )}
+                        <span
+                          className={`truncate ${
+                            hasShortage && firstIng && firstIng.shortage > 0
+                              ? 'text-fact-red'
+                              : 'text-cream-100'
+                          }`}
+                        >
+                          {firstIng
+                            ? `${firstIng.name} • ${formatAmount(firstIng.total_amount, firstIng.unit)}`
+                            : '—'}
+                        </span>
+                        {extraCount > 0 && (
+                          <span
+                            className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] font-medium text-ink-400 tabular-nums"
+                            data-testid="ingredients-more-badge"
+                          >
+                            +{extraCount}
+                          </span>
+                        )}
+                        {hasShortage && (
+                          <span
+                            className="rounded-full bg-fact-red/15 px-2 py-0.5 text-[11px] font-medium text-fact-red"
+                            data-testid="ingredients-shortage-badge"
+                          >
+                            Докупить
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100">
+                  <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100 align-top">
                     {isRev
                       ? forecastVal > 0
                         ? `${formatRub(forecastVal)} ₽`
@@ -299,14 +415,14 @@ export default function ForecastTable({
                   </td>
                   {hasFact && (
                     <>
-                      <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100">
+                      <td className="px-5 py-4 text-right text-sm tabular-nums text-cream-100 align-top">
                         {factVal != null
                           ? isRev
                             ? `${formatRub(factVal)} ₽`
                             : factVal
                           : '—'}
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-5 py-4 text-right align-top">
                         {dev != null ? (
                           <span
                             className={`text-sm font-medium tabular-nums ${deviationColor(dev)}`}

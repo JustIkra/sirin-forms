@@ -114,9 +114,10 @@ class DataCollector:
     async def collect_recent_sales(
         self,
         target_date: datetime.date,
-        days_back: int = 30,
+        date_from: datetime.date | None = None,
     ) -> list[SaleRecord]:
-        date_from = target_date - datetime.timedelta(days=days_back)
+        if date_from is None:
+            date_from = target_date - datetime.timedelta(days=90)
         date_to = target_date - datetime.timedelta(days=1)
 
         try:

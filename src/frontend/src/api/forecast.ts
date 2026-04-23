@@ -36,7 +36,7 @@ export async function fetchForecast(
 
 export async function fetchPlanFact(
   date: string,
-  method: 'ml' = 'ml',
+  method: string = 'ml',
 ): Promise<PlanFactResponse | null> {
   const res = await fetch(`${BASE_URL}/api/plan-fact?date=${date}&method=${method}`);
 
@@ -69,6 +69,40 @@ export async function fetchDiscrepancyAnalysis(
   return res.json();
 }
 
+
+export async function fetchDailyForecast(
+  date: string,
+  force: boolean = false,
+): Promise<DailyForecastResult> {
+  const res = await fetch(`${BASE_URL}/api/forecast/daily`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, force }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ForecastError(res.status, body.detail ?? 'Ошибка сервера');
+  }
+
+  return res.json();
+}
+
+export async function fetchDailyPlanFact(
+  date: string,
+): Promise<PlanFactResponse | null> {
+  const res = await fetch(`${BASE_URL}/api/plan-fact/daily?date=${date}`);
+
+  if (res.status === 404 || res.status === 422) {
+    return null;
+  }
+
+  if (!res.ok) {
+    throw new ForecastError(res.status, 'Ошибка загрузки план-факта');
+  }
+
+  return res.json();
+}
 
 export function getExportUrl(
   date: string,

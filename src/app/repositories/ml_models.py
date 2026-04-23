@@ -9,11 +9,13 @@ from app.repositories.base import BaseRepository
 class MLModelsRepository(BaseRepository[MLModelRecord]):
     model = MLModelRecord
 
-    async def get_latest_model(self, dish_id: str, dish_name: str | None = None) -> MLModelRecord | None:
+    async def get_latest_model(
+        self, dish_id: str, dish_name: str | None = None, granularity: str = "weekly",
+    ) -> MLModelRecord | None:
         # Try by ID first
         stmt = (
             select(MLModelRecord)
-            .where(MLModelRecord.dish_id == dish_id)
+            .where(MLModelRecord.dish_id == dish_id, MLModelRecord.granularity == granularity)
             .order_by(MLModelRecord.trained_at.desc())
             .limit(1)
         )
@@ -24,7 +26,10 @@ class MLModelsRepository(BaseRepository[MLModelRecord]):
         # Fallback: match by name (handles iiko duplicate IDs)
         stmt = (
             select(MLModelRecord)
-            .where(func.lower(func.trim(MLModelRecord.dish_name)) == dish_name.strip().lower())
+            .where(
+                func.lower(func.trim(MLModelRecord.dish_name)) == dish_name.strip().lower(),
+                MLModelRecord.granularity == granularity,
+            )
             .order_by(MLModelRecord.trained_at.desc())
             .limit(1)
         )
@@ -39,10 +44,14 @@ class MLModelsRepository(BaseRepository[MLModelRecord]):
         metrics: dict | None = None,
         feature_names: list[str] | None = None,
         samples_count: int = 0,
+        granularity: str = "weekly",
     ) -> MLModelRecord:
-        # Delete old models for this dish
+        # Delete old models for this dish + granularity
         await self._session.execute(
-            delete(MLModelRecord).where(MLModelRecord.dish_id == dish_id)
+            delete(MLModelRecord).where(
+                MLModelRecord.dish_id == dish_id,
+                MLModelRecord.granularity == granularity,
+            )
         )
         record = MLModelRecord(
             dish_id=dish_id,
@@ -51,23 +60,30 @@ class MLModelsRepository(BaseRepository[MLModelRecord]):
             metrics=metrics,
             feature_names=feature_names,
             samples_count=samples_count,
+            granularity=granularity,
         )
         self._session.add(record)
         await self._session.flush()
         return record
 
-    async def get_all_models(self) -> list[MLModelRecord]:
-        stmt = select(MLModelRecord).order_by(MLModelRecord.dish_name)
+    async def get_all_models(self, granularity: str | None = None) -> list[MLModelRecord]:
+        stmt = select(MLModelRecord)
+        if granularity:
+            stmt = stmt.where(MLModelRecord.granularity == granularity)
+        stmt = stmt.order_by(MLModelRecord.dish_name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_models(self) -> int:
+    async def count_models(self, granularity: str | None = None) -> int:
         stmt = select(func.count()).select_from(MLModelRecord)
+        if granularity:
+            stmt = stmt.where(MLModelRecord.granularity == granularity)
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
-    async def delete_models(self, dish_id: str) -> None:
-        await self._session.execute(
-            delete(MLModelRecord).where(MLModelRecord.dish_id == dish_id)
-        )
+    async def delete_models(self, dish_id: str, granularity: str | None = None) -> None:
+        stmt = delete(MLModelRecord).where(MLModelRecord.dish_id == dish_id)
+        if granularity:
+            stmt = stmt.where(MLModelRecord.granularity == granularity)
+        await self._session.execute(stmt)
         await self._session.flush()

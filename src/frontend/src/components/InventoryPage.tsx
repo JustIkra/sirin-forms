@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { InventoryResponse } from '../types/forecast';
+import type { InventoryResponse, InventoryScope } from '../types/forecast';
 import { ForecastError } from '../api/forecast';
 import { fetchInventory } from '../api/inventory';
 import InventoryTable from './InventoryTable';
@@ -7,12 +7,10 @@ import Spinner from './Spinner';
 import ErrorMessage from './ErrorMessage';
 import Hero from './Hero';
 import DarkPanel from './DarkPanel';
+import { mondayOf, todayMskDate, toIso } from '../utils/date';
+import DatePickerPopover from './DatePickerPopover';
 
 type Tab = 'all' | 'to_buy';
-
-function todayMSK(): string {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
-}
 
 function formatWeekRange(start: string, end: string): string {
   const fmt = (s: string) => {
@@ -22,23 +20,42 @@ function formatWeekRange(start: string, end: string): string {
   return `${fmt(start)} — ${fmt(end)}`;
 }
 
-function formatDateRu(d: string): string {
-  const [y, m, day] = d.split('-');
-  return `${day}.${m}.${y}`;
+function formatDateLongRu(d: string): string {
+  const date = new Date(d + 'T12:00:00');
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 export default function InventoryPage() {
-  const [date, setDate] = useState(todayMSK);
+  const today = todayMskDate();
+
+  const [selectedDay, setSelectedDay] = useState<Date>(today);
+  const [selectedWeekMonday, setSelectedWeekMonday] = useState<Date>(() =>
+    mondayOf(today),
+  );
+  const [scope, setScope] = useState<InventoryScope>('week');
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [tab, setTab] = useState<Tab>('all');
 
+  const handleScopeChange = (next: InventoryScope) => {
+    if (next === scope) return;
+    setScope(next);
+    setData(null);
+    setError(null);
+  };
+
   const handleLoad = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchInventory(date);
+      const date =
+        scope === 'day' ? toIso(selectedDay) : toIso(selectedWeekMonday);
+      const result = await fetchInventory(date, scope);
       setData(result);
     } catch (err) {
       if (err instanceof ForecastError) {
@@ -78,20 +95,30 @@ export default function InventoryPage() {
             </>
           }
           description="Следите за складом по ключевым позициям и быстро понимайте, что заканчивается и что нужно заказать."
-          cta={{
-            label: loading ? 'Загрузка...' : 'Открыть остатки',
-            onClick: handleLoad,
-            disabled: loading,
-          }}
+          secondary={
+            <div>
+              <button
+                type="submit"
+                form="inventory-form"
+                disabled={loading}
+                data-testid="inventory-load"
+                className="btn-accent"
+              >
+                {loading ? 'Загрузка...' : 'Открыть остатки'}
+              </button>
+            </div>
+          }
         />
 
         <DarkPanel eyebrow="ЭКРАН ОСТАТКОВ" windowChrome>
           <form
+            id="inventory-form"
             onSubmit={(e) => {
               e.preventDefault();
               handleLoad();
             }}
             className="flex flex-col gap-6"
+            data-testid="inventory-form"
           >
             <header>
               <div className="eyebrow-light mb-3">ОСТАТКИ И ЗАКУПКА ДЛЯ РЕСТОРАНА</div>
@@ -105,25 +132,50 @@ export default function InventoryPage() {
             </header>
 
             <div>
-              <div className="eyebrow-light mb-2">Дата</div>
-              <div className="inline-flex items-center gap-4 rounded-2xl bg-black/25 px-4 py-3">
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  data-testid="inventory-date"
-                  className="bg-transparent text-base tabular-nums text-cream-100 outline-none [color-scheme:dark]"
-                />
-                <span className="hidden text-sm tabular-nums text-ink-400 md:inline" aria-hidden>
-                  {formatDateRu(date)}
-                </span>
+              <div className="eyebrow-light mb-2">Режим закупки</div>
+              <div
+                className="inline-flex gap-1 rounded-full bg-black/25 p-1"
+                data-testid="inventory-scope-toggle"
+              >
+                {(
+                  [
+                    ['day', 'Дневной'],
+                    ['week', 'Недельный'],
+                  ] as const
+                ).map(([s, label]) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => handleScopeChange(s)}
+                    data-testid={`inventory-scope-${s}`}
+                    className={
+                      scope === s
+                        ? 'chip chip-accent'
+                        : 'chip text-ink-400 hover:text-cream-100'
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            <DatePickerPopover
+              mode={scope === 'day' ? 'daily' : 'weekly'}
+              selectedDay={selectedDay}
+              selectedWeekMonday={selectedWeekMonday}
+              onSelectDay={setSelectedDay}
+              onSelectWeekMonday={setSelectedWeekMonday}
+              label={{ daily: 'Дата закупки', weekly: 'Неделя закупки' }}
+              testIdPrefix="inventory-date"
+            />
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="rounded-2xl bg-black/25 px-4 py-3">
                 <div className="eyebrow-light mb-1">Режим</div>
-                <div className="text-sm text-cream-100">Неделя</div>
+                <div className="text-sm text-cream-100">
+                  {scope === 'day' ? 'День' : 'Неделя'}
+                </div>
               </div>
               <div className="rounded-2xl bg-black/25 px-4 py-3">
                 <div className="eyebrow-light mb-1">Результат</div>
@@ -133,17 +185,6 @@ export default function InventoryPage() {
                 <div className="eyebrow-light mb-1">Выход</div>
                 <div className="text-sm text-cream-100">Остатки + закупка</div>
               </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                data-testid="inventory-load"
-                className="btn-accent"
-              >
-                {loading ? 'Загрузка...' : 'Загрузить остатки'}
-              </button>
             </div>
           </form>
         </DarkPanel>
@@ -160,7 +201,10 @@ export default function InventoryPage() {
           </h3>
           <p className="mb-6 max-w-xl text-sm text-ink-400">
             Складские остатки и прогноз закупки по ингредиентам.
-            Неделя {formatWeekRange(data.week_start, data.week_end)} · позиций {data.items.length}.
+            {data.scope === 'day'
+              ? ` День ${formatDateLongRu(data.period_start)}`
+              : ` Неделя ${formatWeekRange(data.period_start, data.period_end)}`}
+            {' '}· позиций {data.items.length}.
           </p>
 
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

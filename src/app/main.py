@@ -15,8 +15,8 @@ from app.clients.weather import WeatherClient
 from app.config import Settings
 from sqlalchemy import text
 
-from app.db import Base, WeatherRecord, create_engine, create_session_factory
-from app.utils.dt import today as today_msk
+from app.db import Base, MenuSnapshotRecord, WeatherRecord, create_engine, create_session_factory
+from app.utils.dt import MSK, today as today_msk
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,6 +45,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ))
         await conn.execute(text(
             "ALTER TABLE forecasts ALTER COLUMN method SET DEFAULT 'ml'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE ml_models ADD COLUMN IF NOT EXISTS"
+            " granularity VARCHAR(10) DEFAULT 'weekly'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS"
+            " ingredients TEXT"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_menu_snapshots_snapshot_date"
+            " ON menu_snapshots (snapshot_date)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_menu_snapshots_dish_id"
+            " ON menu_snapshots (dish_id)"
         ))
     app.state.session_factory = create_session_factory(engine)
     app.state.settings = settings
@@ -76,6 +92,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Backfill sales, weather, train models in background
     asyncio.create_task(_startup_backfill(iiko, weather, app.state.session_factory, settings))
+    # Scheduled daily retraining on new data
+    if settings.auto_retrain_enabled:
+        asyncio.create_task(_daily_retrain_loop(iiko, weather, app.state.session_factory, settings))
 
     yield
 
@@ -159,6 +178,7 @@ async def _startup_backfill(
         if not models_count or models_count == 0:
             logger.info("ML models: none found — training...")
             from app.repositories.forecasts import ForecastsRepository
+            from app.repositories.menu_snapshots import MenuSnapshotsRepository
             from app.repositories.ml_models import MLModelsRepository
             from app.repositories.products import ProductsRepository
             from app.services.ml_forecast import MLForecastService
@@ -179,6 +199,8 @@ async def _startup_backfill(
                     sales_repo=SalesRepository(session),
                     weather_repo=WeatherRepository(session),
                     settings=settings,
+                    menu_repo=MenuSnapshotsRepository(session),
+                    products_repo=ProductsRepository(session),
                 )
                 result = await service.train_models(force=True)
                 await session.commit()
@@ -217,6 +239,158 @@ async def _startup_backfill(
             logger.info("Assembly charts: %d ingredient rows, OK", ing_count)
     except Exception:
         logger.warning("Assembly charts sync failed", exc_info=True)
+
+    # 5. Menu snapshot — seed on fresh DBs so the first /api/forecast
+    #    call has an active-dish list to filter against (Domain 1).
+    try:
+        async with session_factory() as session:
+            snap_count = await session.scalar(
+                select(func.count()).select_from(MenuSnapshotRecord),
+            )
+
+        if not snap_count:
+            logger.info("Menu snapshots: table empty — taking initial snapshot...")
+            from app.repositories.menu_snapshots import MenuSnapshotsRepository
+            from app.repositories.products import ProductsRepository
+            from app.services.menu_snapshot import MenuSnapshotService
+
+            async with session_factory() as session:
+                service = MenuSnapshotService(
+                    iiko_client=iiko_client,
+                    products_repo=ProductsRepository(session),
+                    menu_repo=MenuSnapshotsRepository(session),
+                    sales_repo=SalesRepository(session),
+                )
+                seeded = await service.make_snapshot(today)
+                await session.commit()
+                logger.info("Menu snapshot seeded: %d dishes", seeded)
+        else:
+            logger.info("Menu snapshots: %d rows, OK", snap_count)
+    except Exception:
+        logger.warning("Menu snapshot seed failed", exc_info=True)
+
+
+async def _daily_retrain_loop(
+    iiko_client: IikoClient,
+    weather_client: WeatherClient,
+    session_factory,
+    settings: Settings,
+) -> None:
+    """Ежедневное переобучение моделей на новых данных в фоне.
+
+    Цикл:
+      1. Вычислить задержку до ближайшего `auto_retrain_hour_msk` в MSK.
+      2. Спать до этого момента.
+      3. Выполнить backfill новых продаж + weekly/daily retrain (force=False).
+      4. Повторить с шагом 24 часа.
+    """
+    from app.repositories.forecasts import ForecastsRepository
+    from app.repositories.menu_snapshots import MenuSnapshotsRepository
+    from app.repositories.ml_models import MLModelsRepository
+    from app.repositories.products import ProductsRepository
+    from app.repositories.sales import SalesRepository
+    from app.repositories.weather import WeatherRepository
+    from app.services.backfill import BackfillService
+    from app.services.data_collector import DataCollector
+    from app.services.ml_forecast import MLForecastService
+
+    target_hour = max(0, min(23, settings.auto_retrain_hour_msk))
+
+    while True:
+        now_msk = datetime.datetime.now(tz=MSK)
+        target = now_msk.replace(
+            hour=target_hour, minute=0, second=0, microsecond=0,
+        )
+        if target <= now_msk:
+            target += datetime.timedelta(days=1)
+        wait_seconds = (target - now_msk).total_seconds()
+        logger.info(
+            "Daily retrain scheduled at %s MSK (sleep %.0fs)",
+            target.isoformat(), wait_seconds,
+        )
+        try:
+            await asyncio.sleep(wait_seconds)
+        except asyncio.CancelledError:
+            return
+
+        # 1. Backfill продаж за вчера-сегодня
+        try:
+            today = today_msk()
+            yesterday = today - datetime.timedelta(days=1)
+            async with session_factory() as session:
+                service = BackfillService(
+                    iiko_client=iiko_client,
+                    sales_repo=SalesRepository(session),
+                    department_id=settings.iiko_department_id,
+                )
+                result = await service.backfill(date_from=yesterday, date_to=today)
+                await session.commit()
+                logger.info("Daily backfill %s..%s: %s", yesterday, today, result)
+        except Exception:
+            logger.warning("Daily sales backfill failed", exc_info=True)
+
+        # 2. Обновление погоды
+        try:
+            today = today_msk()
+            start = today - datetime.timedelta(days=2)
+            days = await weather_client.get_historical_range(start, today)
+            async with session_factory() as session:
+                repo = WeatherRepository(session)
+                for day in days:
+                    await repo.save_daily_weather(day)
+                await session.commit()
+        except Exception:
+            logger.warning("Daily weather refresh failed", exc_info=True)
+
+        # 2.5. Снимок меню iiko + stop-list (Domain 1).
+        # На падении — продолжаем, retrain использует последний доступный снимок.
+        try:
+            from app.repositories.menu_snapshots import MenuSnapshotsRepository
+            from app.services.menu_snapshot import MenuSnapshotService
+
+            async with session_factory() as session:
+                service = MenuSnapshotService(
+                    iiko_client=iiko_client,
+                    products_repo=ProductsRepository(session),
+                    menu_repo=MenuSnapshotsRepository(session),
+                    sales_repo=SalesRepository(session),
+                )
+                snap_count = await service.make_snapshot(today_msk())
+                await session.commit()
+                logger.info("Menu snapshot refreshed: %d dishes", snap_count)
+        except Exception:
+            logger.warning("Menu snapshot refresh failed", exc_info=True)
+
+        # 3. Переобучить модели (force=False — только блюда с новыми данными)
+        try:
+            async with session_factory() as session:
+                collector = DataCollector(
+                    iiko_client=iiko_client,
+                    weather_client=weather_client,
+                    sales_repo=SalesRepository(session),
+                    products_repo=ProductsRepository(session),
+                    weather_repo=WeatherRepository(session),
+                    settings=settings,
+                )
+                service = MLForecastService(
+                    data_collector=collector,
+                    forecasts_repo=ForecastsRepository(session),
+                    ml_models_repo=MLModelsRepository(session),
+                    sales_repo=SalesRepository(session),
+                    weather_repo=WeatherRepository(session),
+                    settings=settings,
+                    menu_repo=MenuSnapshotsRepository(session),
+                    products_repo=ProductsRepository(session),
+                )
+                weekly_result = await service.train_models(force=False)
+                daily_result = await service.train_daily_models(force=False)
+                await session.commit()
+                logger.info(
+                    "Daily retrain OK: weekly=%s, daily=%s",
+                    weekly_result, daily_result,
+                )
+        except Exception:
+            logger.warning("Daily retrain failed", exc_info=True)
 
 
 app = FastAPI(

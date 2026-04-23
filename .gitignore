@@ -2,6 +2,7 @@
 .ruff_cache
 docs
 repots/
+.playwright-mcp
 
 # Python
 __pycache__/

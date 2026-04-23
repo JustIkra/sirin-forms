@@ -142,12 +142,24 @@ export default function App() {
                   ? 'Дневной прогноз для смены: выбирайте дату, запускайте расчёт и получайте результат. Один экран для запуска, ниже — таблица по блюдам.'
                   : 'Недельный прогноз для ресторана: выбирайте режим, запускайте расчёт и получайте результат. Один экран для запуска, ниже — таблица по блюдам, количеству и факторам спроса.'
               }
+              secondary={
+                <div>
+                  <button
+                    type="submit"
+                    form="forecast-form"
+                    disabled={activeLoading}
+                    data-testid="forecast-submit"
+                    className="btn-accent"
+                  >
+                    {activeLoading ? 'Расчёт...' : 'Запустить прогноз'}
+                  </button>
+                </div>
+              }
             />
 
             <DarkPanel eyebrow="ЭКРАН ЗАПУСКА" windowChrome>
               <ForecastForm
                 onSubmit={handleSubmit}
-                loading={activeLoading}
                 mode={mode}
                 onModeChange={setMode}
               />

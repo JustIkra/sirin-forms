@@ -53,6 +53,7 @@ export default function ForecastMeta({ result, summary }: Props) {
   const revDev = hasSummary
     ? revDevPct(summary.total_predicted_revenue, summary.total_actual_revenue)
     : 0;
+  const showForecastRevenue = !hasSummary && result.total_revenue > 0;
 
   return (
     <div
@@ -82,6 +83,17 @@ export default function ForecastMeta({ result, summary }: Props) {
           {result.is_holiday ? 'ДА' : 'НЕТ'}
         </p>
       </Cell>
+
+      {showForecastRevenue && (
+        <Cell label="Выручка (прогноз)" wide>
+          <p
+            className="text-lg font-semibold tabular-nums text-cream-100"
+            data-testid="forecast-meta-revenue"
+          >
+            {formatRub(Math.round(result.total_revenue))} ₽
+          </p>
+        </Cell>
+      )}
 
       {hasSummary && (
         <>

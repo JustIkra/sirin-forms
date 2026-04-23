@@ -48,7 +48,7 @@ async def test_inventory_returns_response(app: FastAPI) -> None:
         ],
     )
     service = MagicMock()
-    service.get_weekly_inventory = AsyncMock(return_value=mock_response)
+    service.get_inventory = AsyncMock(return_value=mock_response)
 
     with patch("app.api.forecast.InventoryService", return_value=service):
         async with await _client(app) as client:
@@ -58,6 +58,7 @@ async def test_inventory_returns_response(app: FastAPI) -> None:
     data = resp.json()
     assert data["date"] == "2026-03-17"
     assert data["week_start"] == "2026-03-16"
+    assert data["period_start"] == "2026-03-16"  # авто-заполнено из week_start
     assert len(data["items"]) == 1
     assert data["items"][0]["product_name"] == "Мука"
     assert data["items"][0]["to_buy"] == 5.0
@@ -65,7 +66,7 @@ async def test_inventory_returns_response(app: FastAPI) -> None:
 
 async def test_inventory_handles_iiko_error(app: FastAPI) -> None:
     service = MagicMock()
-    service.get_weekly_inventory = AsyncMock(side_effect=ApiClientError("iiko down"))
+    service.get_inventory = AsyncMock(side_effect=ApiClientError("iiko down"))
 
     with patch("app.api.forecast.InventoryService", return_value=service):
         async with await _client(app) as client:

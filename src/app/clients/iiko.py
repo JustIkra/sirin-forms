@@ -174,6 +174,89 @@ class IikoClient(BaseHttpClient):
                 if "id" in item and not item.get("deleted", False)
             ]
 
+    async def get_stop_list(self) -> set[str]:
+        """Fetch currently-stopped dish IDs from iiko's delivery stop-list.
+
+        iiko has NOT documented the response shape in-repo; known variants
+        observed in the wild:
+          - bare JSON list:            `[{productId: ...}, ...]`
+          - wrapped dict:              `{"stopList": [...]}` / `{"items": [...]}`
+                                       / `{"data": [...]}`
+          - per-department wrappers:   `{"stopLists": [{"items": [...]}, ...]}`
+
+        Each entry's dish id is extracted from `productId` (preferred),
+        falling back to `product` or `id`.
+
+        Graceful degradation: ANY failure (HTTP non-200, parse error,
+        exception, unexpected shape) logs a warning and returns an empty
+        set. Downstream code treats "unknown stop-list" as "no dishes
+        stopped".
+        """
+        try:
+            async with self._session() as token:
+                response = await self._request(
+                    "GET",
+                    "/stopLists/getDeliveryStopList",
+                    params={"key": token},
+                )
+                if response.status_code != 200:
+                    logger.warning(
+                        "get_stop_list: HTTP %s — returning empty set",
+                        response.status_code,
+                    )
+                    return set()
+                try:
+                    data = response.json()
+                except Exception:
+                    logger.warning(
+                        "get_stop_list: failed to parse JSON — returning empty set",
+                        exc_info=True,
+                    )
+                    return set()
+        except Exception:
+            logger.warning(
+                "get_stop_list: request failed — returning empty set",
+                exc_info=True,
+            )
+            return set()
+
+        return self._extract_stop_list_ids(data)
+
+    @staticmethod
+    def _extract_stop_list_ids(data: Any) -> set[str]:
+        """Defensively extract stopped product IDs from various iiko shapes."""
+        def _ids_from_items(items: Any) -> set[str]:
+            if not isinstance(items, list):
+                return set()
+            out: set[str] = set()
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                pid = item.get("productId") or item.get("product") or item.get("id")
+                if pid:
+                    out.add(str(pid))
+            return out
+
+        if isinstance(data, list):
+            return _ids_from_items(data)
+
+        if isinstance(data, dict):
+            # Flat wrappers: {"stopList": [...]} / {"items": [...]} / {"data": [...]}
+            for key in ("stopList", "items", "data"):
+                if key in data and isinstance(data[key], list):
+                    return _ids_from_items(data[key])
+
+            # Nested per-department wrapper: {"stopLists": [{"items": [...]}, ...]}
+            nested = data.get("stopLists")
+            if isinstance(nested, list):
+                out: set[str] = set()
+                for dept in nested:
+                    if isinstance(dept, dict):
+                        out |= _ids_from_items(dept.get("items"))
+                return out
+
+        return set()
+
     async def get_measure_units(self) -> dict[str, str]:
         """GET /common/measureUnits — справочник {unit_uuid: name} (кг / л / шт / порц)."""
         async with self._session() as token:

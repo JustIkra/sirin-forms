@@ -1,3 +1,13 @@
+export interface DishIngredient {
+  product_id: string;
+  name: string;
+  amount_per_unit: number;
+  total_amount: number;
+  unit: string | null;
+  stock: number | null;
+  shortage: number;
+}
+
 export interface DishForecast {
   dish_id: string;
   dish_name: string;
@@ -5,6 +15,7 @@ export interface DishForecast {
   key_factors: string[];
   price: number | null;
   prediction_method: 'ml' | 'fallback';
+  ingredients: DishIngredient[];
 }
 
 export interface DailyForecastResult {
@@ -18,6 +29,7 @@ export interface DailyForecastResult {
   fallback_count: number;
   week_start: string | null;
   week_end: string | null;
+  total_revenue: number;
 }
 
 export interface PlanFactRecord {
@@ -87,8 +99,13 @@ export interface InventoryItem {
   unit: string | null;
 }
 
+export type InventoryScope = 'day' | 'week';
+
 export interface InventoryResponse {
   date: string;
+  scope: InventoryScope;
+  period_start: string;
+  period_end: string;
   week_start: string;
   week_end: string;
   items: InventoryItem[];
