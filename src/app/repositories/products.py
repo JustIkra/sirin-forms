@@ -145,6 +145,28 @@ class ProductsRepository(BaseRepository[ProductRecord]):
             for r in result.scalars().all()
         ]
 
+    async def get_ingredients_map(
+        self, dish_ids: list[str],
+    ) -> dict[str, list[ProductIngredient]]:
+        """Bulk-fetch ingredients for many dishes. Returns {dish_id: [ingredient, ...]}."""
+        if not dish_ids:
+            return {}
+        stmt = select(IngredientRecord).where(
+            IngredientRecord.product_id.in_(dish_ids),
+        )
+        result = await self._session.execute(stmt)
+        out: dict[str, list[ProductIngredient]] = {did: [] for did in dish_ids}
+        for r in result.scalars().all():
+            out.setdefault(r.product_id, []).append(
+                ProductIngredient(
+                    product_id=r.ingredient_id,
+                    name=r.name,
+                    amount=r.amount,
+                    unit=r.unit,
+                )
+            )
+        return out
+
     @staticmethod
     def _to_model(record: ProductRecord) -> IikoProduct:
         return IikoProduct(

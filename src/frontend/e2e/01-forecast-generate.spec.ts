@@ -4,7 +4,8 @@ import { shoot, todayMsk } from './helpers';
 test('forecast: генерация недельного прогноза на сегодня', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'Недельный прогноз' })).toBeVisible();
+  await expect(page.getByTestId('forecast-form')).toBeVisible();
+  await expect(page.getByTestId('mode-weekly')).toBeVisible();
   await shoot(page, '01-forecast-initial');
 
   const dateInput = page.getByTestId('forecast-date');

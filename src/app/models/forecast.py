@@ -3,6 +3,18 @@ import datetime
 from pydantic import BaseModel
 
 
+class DishIngredient(BaseModel):
+    """Ингредиент блюда с расчётной потребностью на прогноз."""
+
+    product_id: str
+    name: str
+    amount_per_unit: float  # норма на 1 порцию
+    total_amount: float  # amount_per_unit * predicted_quantity
+    unit: str | None = None
+    stock: float | None = None  # остаток (если доступен из iiko)
+    shortage: float = 0.0  # нехватка: max(0, total_amount - stock)
+
+
 class DishForecast(BaseModel):
     dish_id: str
     dish_name: str
@@ -11,6 +23,7 @@ class DishForecast(BaseModel):
     key_factors: list[str] = []
     price: float | None = None
     prediction_method: str = "ml"
+    ingredients: list[DishIngredient] = []
 
 
 class DailyForecastResult(BaseModel):
@@ -24,6 +37,7 @@ class DailyForecastResult(BaseModel):
     fallback_count: int = 0
     week_start: datetime.date | None = None
     week_end: datetime.date | None = None
+    total_revenue: float = 0.0  # сумма predicted_quantity * price по всем блюдам
 
 
 class PlanFactRecord(BaseModel):

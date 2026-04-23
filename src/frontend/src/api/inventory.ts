@@ -1,10 +1,13 @@
-import type { InventoryResponse } from '../types/forecast';
+import type { InventoryResponse, InventoryScope } from '../types/forecast';
 import { ForecastError } from './forecast';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
-export async function fetchInventory(date: string): Promise<InventoryResponse> {
-  const res = await fetch(`${BASE_URL}/api/inventory?date=${date}`);
+export async function fetchInventory(
+  date: string,
+  scope: InventoryScope = 'week',
+): Promise<InventoryResponse> {
+  const res = await fetch(`${BASE_URL}/api/inventory?date=${date}&scope=${scope}`);
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));

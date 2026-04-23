@@ -5,11 +5,14 @@ interface Props {
 
 export default function ErrorMessage({ message, status }: Props) {
   return (
-    <div className="mx-auto mt-8 max-w-lg rounded-lg border border-red-500/20 bg-red-500/10 p-4">
-      <h3 className="font-semibold text-red-400">
+    <div
+      className="mx-auto mt-8 max-w-lg rounded-2xl border border-fact-red/25 bg-fact-red/10 p-5"
+      data-testid="error-message"
+    >
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-fact-red">
         Ошибка{status ? ` (${status})` : ''}
       </h3>
-      <p className="mt-1 text-sm text-red-300">{message}</p>
+      <p className="mt-2 text-sm text-ink-700">{message}</p>
     </div>
   );
 }

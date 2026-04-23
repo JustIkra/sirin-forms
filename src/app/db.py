@@ -79,6 +79,7 @@ class ForecastRecord(Base):
     confidence: Mapped[float] = mapped_column(Float)
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
     key_factors: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)
     weather: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_holiday: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -116,6 +117,26 @@ class MLModelRecord(Base):
         default=lambda: datetime.datetime.now(tz=MSK),
     )
     samples_count: Mapped[int] = mapped_column(Integer, default=0)
+    granularity: Mapped[str] = mapped_column(String(10), default="weekly")
+
+
+class MenuSnapshotRecord(Base):
+    """Daily snapshot of iiko menu + stop-list (Domain 1).
+
+    Populated at 04:00 MSK before retraining. Forecast and training pipelines
+    read from this table, not from live iiko. A dish missing from the snapshot
+    = missing from iiko (deleted) → not forecasted and not trained.
+    """
+
+    __tablename__ = "menu_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    snapshot_date: Mapped[datetime.date] = mapped_column(Date, index=True)
+    dish_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("products.id"), index=True,
+    )
+    included_in_menu: Mapped[bool] = mapped_column(default=False)
+    in_stop_list: Mapped[bool] = mapped_column(default=False)
 
 
 def create_engine(database_url: str):

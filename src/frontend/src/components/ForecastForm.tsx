@@ -1,83 +1,170 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ForecastMode } from '../types/forecast';
+import { mondayOf, todayMskDate, toIso } from '../utils/date';
+import DatePickerPopover from './DatePickerPopover';
 
 interface Props {
   onSubmit: (date: string, force: boolean) => void;
-  loading: boolean;
+  mode: ForecastMode;
+  onModeChange: (mode: ForecastMode) => void;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
 }
 
-function todayMSK(): string {
-  return new Date()
-    .toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
-}
+export default function ForecastForm({
+  onSubmit,
+  mode,
+  onModeChange,
+  eyebrow = 'ПРОГНОЗ СПРОСА ДЛЯ РЕСТОРАНА',
+  title = 'Сначала запуск, потом прогноз',
+  description = 'Выберите режим, укажите дату и запустите расчёт. После этого система раскроет таблицу по блюдам.',
+}: Props) {
+  const today = todayMskDate();
 
-function getWeekRange(dateStr: string): { start: string; end: string; label: string } {
-  const d = new Date(dateStr + 'T12:00:00');
-  const day = d.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diffToMon);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-
-  const fmt = (dt: Date) => dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-  const iso = (dt: Date) => dt.toISOString().slice(0, 10);
-
-  return {
-    start: iso(monday),
-    end: iso(sunday),
-    label: `${fmt(monday)} — ${fmt(sunday)}`,
-  };
-}
-
-export default function ForecastForm({ onSubmit, loading }: Props) {
-  const [date, setDate] = useState(todayMSK);
+  // Daily: selected day. Weekly: the Monday of the selected week.
+  const [selectedDay, setSelectedDay] = useState<Date>(today);
+  const [selectedWeekMonday, setSelectedWeekMonday] = useState<Date>(() =>
+    mondayOf(today),
+  );
   const [force, setForce] = useState(false);
 
-  const week = useMemo(() => getWeekRange(date), [date]);
+  // When the mode prop flips, project the current selection between modes so
+  // the two stores stay in sync instead of reverting to stale "today" values.
+  const prevModeRef = useRef<ForecastMode>(mode);
+  useEffect(() => {
+    const prev = prevModeRef.current;
+    if (prev === mode) return;
+    if (prev === 'daily' && mode === 'weekly') {
+      setSelectedWeekMonday(mondayOf(selectedDay));
+    } else if (prev === 'weekly' && mode === 'daily') {
+      setSelectedDay(selectedWeekMonday);
+    }
+    prevModeRef.current = mode;
+    // Only react to mode flips; selection values read via closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(date, force);
+    if (mode === 'weekly') {
+      onSubmit(toIso(selectedWeekMonday), force);
+    } else {
+      onSubmit(toIso(selectedDay), force);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4" data-testid="forecast-form">
+    <form
+      id="forecast-form"
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-6"
+      data-testid="forecast-form"
+    >
+      <header>
+        <div className="eyebrow-light mb-3">{eyebrow}</div>
+        <h3 className="text-2xl font-semibold leading-tight text-cream-100">
+          {title}
+        </h3>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-400">
+          {description}
+        </p>
+      </header>
+
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-300">
-          Неделя прогноза
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            data-testid="forecast-date"
-            className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 focus:outline-none"
-          />
-          <span className="text-xs text-slate-400 tabular-nums">
-            {week.label}
-          </span>
+        <div className="eyebrow-light mb-2">Режим прогноза</div>
+        <div
+          className="inline-flex gap-1 rounded-full bg-black/25 p-1"
+          data-testid="mode-toggle"
+        >
+          {(
+            [
+              ['daily', 'Дневной'],
+              ['weekly', 'Недельный'],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onModeChange(m)}
+              data-testid={`mode-${m}`}
+              className={
+                mode === m
+                  ? 'chip chip-accent'
+                  : 'chip text-ink-400 hover:text-cream-100'
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-slate-300">
+      <DatePickerPopover
+        mode={mode}
+        selectedDay={selectedDay}
+        selectedWeekMonday={selectedWeekMonday}
+        onSelectDay={setSelectedDay}
+        onSelectWeekMonday={setSelectedWeekMonday}
+        label={{ daily: 'Дата прогноза', weekly: 'Неделя прогноза' }}
+        testIdPrefix="forecast-date"
+      />
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <InfoCell label="Результат" value="Таблица по блюдам" />
+        <InfoCell label="Формат" value="Количество / выручка" />
+        <InfoCell label="Выход" value="Прогноз с факторами" />
+      </div>
+
+      <label
+        className={
+          'flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-black/25 px-5 py-4 ' +
+          'transition-colors hover:bg-black/35 ' +
+          'has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent-500/50'
+        }
+      >
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-cream-100">
+            Пересчитать заново
+          </span>
+          <span className="text-xs leading-relaxed text-ink-400">
+            Игнорировать кэш и запустить расчёт с нуля
+          </span>
+        </span>
+
         <input
           type="checkbox"
           checked={force}
           onChange={(e) => setForce(e.target.checked)}
           data-testid="forecast-force"
-          className="rounded border-white/10 bg-white/5 text-white"
+          className="sr-only"
         />
-        Пересчитать (force)
+        <span
+          aria-hidden
+          className={
+            'relative inline-block h-6 w-11 shrink-0 rounded-full transition-colors ' +
+            (force
+              ? 'bg-accent-500 shadow-[0_0_0_4px_rgba(72,147,255,0.12)]'
+              : 'bg-white/[0.08]')
+          }
+        >
+          <span
+            className={
+              'absolute top-0.5 h-5 w-5 rounded-full bg-cream-100 shadow transition-transform ' +
+              (force ? 'left-0.5 translate-x-5' : 'left-0.5 translate-x-0')
+            }
+          />
+        </span>
       </label>
-      <button
-        type="submit"
-        disabled={loading}
-        data-testid="forecast-submit"
-        className="rounded-md bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/25 transition-colors hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading ? 'Расчёт...' : 'Запустить прогноз'}
-      </button>
     </form>
+  );
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-black/25 px-4 py-3">
+      <div className="eyebrow-light mb-1">{label}</div>
+      <div className="text-sm text-cream-100">{value}</div>
+    </div>
   );
 }

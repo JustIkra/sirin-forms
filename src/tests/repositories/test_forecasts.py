@@ -127,6 +127,101 @@ async def test_plan_fact_matches_by_name(session):
     assert rec.deviation_pct == -20.0
 
 
+async def test_delete_obsolete_forecasts_scoped_by_method(session):
+    """Retrain cleanup removes rows for obsolete dishes only for its method."""
+    repo = ForecastsRepository(session)
+    d_weekly = datetime.date(2026, 4, 20)
+    d_daily = datetime.date(2026, 4, 23)
+
+    await repo.save_forecast(_make_forecast(d_weekly, [
+        DishForecast(
+            dish_id="active",
+            dish_name="Активное",
+            predicted_quantity=5.0, confidence=0.7, price=100.0,
+        ),
+        DishForecast(
+            dish_id="dead",
+            dish_name="Удалённое",
+            predicted_quantity=3.0, confidence=0.6, price=200.0,
+        ),
+    ], method="ml"))
+    await repo.save_forecast(_make_forecast(d_daily, [
+        DishForecast(
+            dish_id="active",
+            dish_name="Активное",
+            predicted_quantity=2.0, confidence=0.7, price=100.0,
+        ),
+        DishForecast(
+            dish_id="dead",
+            dish_name="Удалённое",
+            predicted_quantity=1.0, confidence=0.6, price=200.0,
+        ),
+    ], method="ml_daily"))
+
+    # Weekly retrain: deletes only weekly rows for `dead`.
+    deleted = await repo.delete_obsolete_forecasts(
+        active_dish_ids={"active"}, method="ml",
+    )
+    assert deleted == 1
+
+    weekly = await repo.get_forecast(d_weekly, method="ml")
+    daily = await repo.get_forecast(d_daily, method="ml_daily")
+    assert weekly is not None and len(weekly.forecasts) == 1
+    assert weekly.forecasts[0].dish_id == "active"
+    # Daily row for `dead` must still be there — not touched by weekly cleanup.
+    assert daily is not None and len(daily.forecasts) == 2
+
+    # Daily retrain: now cleans up its own method.
+    deleted = await repo.delete_obsolete_forecasts(
+        active_dish_ids={"active"}, method="ml_daily",
+    )
+    assert deleted == 1
+    daily = await repo.get_forecast(d_daily, method="ml_daily")
+    assert daily is not None and len(daily.forecasts) == 1
+    assert daily.forecasts[0].dish_id == "active"
+
+
+async def test_delete_obsolete_forecasts_empty_active_set_is_noop(session):
+    """Empty active set → skip the query entirely (safety rail against
+    a momentarily empty snapshot wiping the entire forecast cache)."""
+    repo = ForecastsRepository(session)
+    d = datetime.date(2026, 4, 20)
+    await repo.save_forecast(_make_forecast(d))
+
+    deleted = await repo.delete_obsolete_forecasts(
+        active_dish_ids=set(), method="ml",
+    )
+    assert deleted == 0
+
+    got = await repo.get_forecast(d, method="ml")
+    assert got is not None and len(got.forecasts) == 1
+
+
+async def test_delete_obsolete_forecasts_respects_date_from(session):
+    """`date_from` keeps historical rows but wipes future/current."""
+    repo = ForecastsRepository(session)
+    d_past = datetime.date(2026, 3, 1)
+    d_future = datetime.date(2026, 4, 20)
+    dead_row = DishForecast(
+        dish_id="dead", dish_name="Удалённое",
+        predicted_quantity=3.0, confidence=0.6, price=200.0,
+    )
+    await repo.save_forecast(_make_forecast(d_past, [dead_row], method="ml"))
+    await repo.save_forecast(_make_forecast(d_future, [dead_row], method="ml"))
+
+    deleted = await repo.delete_obsolete_forecasts(
+        active_dish_ids={"active"},
+        method="ml",
+        date_from=datetime.date(2026, 4, 1),
+    )
+    assert deleted == 1
+
+    past = await repo.get_forecast(d_past, method="ml")
+    future = await repo.get_forecast(d_future, method="ml")
+    assert past is not None and len(past.forecasts) == 1  # kept
+    assert future is None or len(future.forecasts) == 0   # wiped
+
+
 async def test_plan_fact_unforecasted_sale_appended(session):
     repo = ForecastsRepository(session)
     d = datetime.date(2026, 3, 2)

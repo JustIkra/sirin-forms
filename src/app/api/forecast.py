@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.api.deps import (
     get_forecasts_repo,
     get_iiko_client,
+    get_menu_snapshots_repo,
     get_ml_models_repo,
     get_openrouter_client,
     get_products_repo,
@@ -34,6 +35,7 @@ from app.models.forecast import (
 )
 from app.models.iiko import OlapReportType, OlapV2Request
 from app.repositories.forecasts import ForecastsRepository
+from app.repositories.menu_snapshots import MenuSnapshotsRepository
 from app.repositories.ml_models import MLModelsRepository
 from app.repositories.products import ProductsRepository
 from app.repositories.sales import SalesRepository
@@ -69,6 +71,7 @@ async def create_forecast(
     weather_repo: WeatherRepository = Depends(get_weather_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
     ml_models_repo: MLModelsRepository = Depends(get_ml_models_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
     settings: Settings = Depends(get_settings),
 ) -> DailyForecastResult:
     collector = DataCollector(
@@ -88,6 +91,8 @@ async def create_forecast(
             sales_repo=sales_repo,
             weather_repo=weather_repo,
             settings=settings,
+            menu_repo=menu_repo,
+            products_repo=products_repo,
         )
         return await service.generate_forecast(body.date, force=body.force)
     except ForecastError as exc:
@@ -115,6 +120,7 @@ async def get_plan_fact(
     iiko_client: IikoClient = Depends(get_iiko_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
     settings: Settings = Depends(get_settings),
 ) -> PlanFactResponse | JSONResponse:
     today = today_msk()
@@ -184,8 +190,9 @@ async def get_plan_fact(
         }
         for d in dish_agg.values()
     ]
+    active_dish_names = await menu_repo.get_latest_active_dish_names()
     records = await forecasts_repo.get_plan_fact(
-        date, date, actual_sales, method=method
+        date, date, actual_sales, method=method, active_dish_names=active_dish_names,
     )
 
     # Calculate MAPE using max(actual, predicted) as denominator
@@ -228,6 +235,7 @@ async def analyze_discrepancies(
     sales_repo: SalesRepository = Depends(get_sales_repo),
     weather_repo: WeatherRepository = Depends(get_weather_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
     openrouter_client: OpenRouterClient = Depends(get_openrouter_client),
 ) -> DiscrepancyAnalysisResponse | JSONResponse:
     today = today_msk()
@@ -280,8 +288,10 @@ async def analyze_discrepancies(
         }
         for d in dish_agg.values()
     ]
+    active_dish_names = await menu_repo.get_latest_active_dish_names()
     records = await forecasts_repo.get_plan_fact(
-        body.date, body.date, actual_sales, method=body.method
+        body.date, body.date, actual_sales,
+        method=body.method, active_dish_names=active_dish_names,
     )
 
     # MAPE / accuracy
@@ -354,6 +364,7 @@ async def get_accuracy_history(
     days: int = Query(30, ge=1, le=365),
     sales_repo: SalesRepository = Depends(get_sales_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
 ):
     from app.utils.calendar import get_calendar_context
 
@@ -365,6 +376,8 @@ async def get_accuracy_history(
     dates_with_forecasts: dict[datetime.date, set[str]] = {}
     for d, method in forecast_dates:
         dates_with_forecasts.setdefault(d, set()).add(method)
+
+    active_dish_names = await menu_repo.get_latest_active_dish_names()
 
     records: list[AccuracyDayRecord] = []
     for d, methods in sorted(dates_with_forecasts.items()):
@@ -387,7 +400,7 @@ async def get_accuracy_history(
 
         if "ml" in methods:
             pf_records = await forecasts_repo.get_plan_fact(
-                d, d, actual_sales, method="ml"
+                d, d, actual_sales, method="ml", active_dish_names=active_dish_names,
             )
             deviations = [
                 abs(r.actual_quantity - r.predicted_quantity)
@@ -464,8 +477,9 @@ async def backfill_weather(
     }
 
 
-@router.post("/ml/train")
-async def train_ml_models(
+@router.post("/forecast/daily", response_model=DailyForecastResult)
+async def create_daily_forecast(
+    body: ForecastRequest,
     iiko_client: IikoClient = Depends(get_iiko_client),
     weather_client: WeatherClient = Depends(get_weather_client),
     sales_repo: SalesRepository = Depends(get_sales_repo),
@@ -473,6 +487,131 @@ async def train_ml_models(
     weather_repo: WeatherRepository = Depends(get_weather_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
     ml_models_repo: MLModelsRepository = Depends(get_ml_models_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
+    settings: Settings = Depends(get_settings),
+) -> DailyForecastResult:
+    collector = DataCollector(
+        iiko_client=iiko_client,
+        weather_client=weather_client,
+        sales_repo=sales_repo,
+        products_repo=products_repo,
+        weather_repo=weather_repo,
+        settings=settings,
+    )
+    try:
+        service = MLForecastService(
+            data_collector=collector,
+            forecasts_repo=forecasts_repo,
+            ml_models_repo=ml_models_repo,
+            sales_repo=sales_repo,
+            weather_repo=weather_repo,
+            settings=settings,
+            menu_repo=menu_repo,
+            products_repo=products_repo,
+        )
+        return await service.generate_daily_forecast(body.date, force=body.force)
+    except ForecastError as exc:
+        logger.error("Daily forecast error: %s", exc)
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+    except ApiClientError as exc:
+        logger.error("API client error: %s", exc)
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+@router.get("/plan-fact/daily", response_model=PlanFactResponse)
+async def get_daily_plan_fact(
+    date: datetime.date = Query(...),
+    iiko_client: IikoClient = Depends(get_iiko_client),
+    sales_repo: SalesRepository = Depends(get_sales_repo),
+    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
+    settings: Settings = Depends(get_settings),
+) -> PlanFactResponse | JSONResponse:
+    today = today_msk()
+    if date >= today:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "День ещё не завершён — фактических данных нет"},
+        )
+
+    forecast = await forecasts_repo.get_forecast(date, method="ml_daily")
+    if not forecast:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Дневной прогноз на эту дату не найден"},
+        )
+
+    # Fetch actual sales for this day
+    try:
+        report = await iiko_client.get_olap_report_v2(
+            OlapV2Request(
+                report_type=OlapReportType.SALES,
+                date_from=date,
+                date_to=date,
+                group_by_row_fields=["DishName", "DishId", "OpenDate.Typed"],
+                aggregate_fields=["DishAmountInt", "DishSumInt"],
+                filters=DataCollector.build_olap_filters(
+                    date, date, settings.iiko_department_id,
+                ),
+            ),
+        )
+        sales = DataCollector._parse_olap_sales(report.data)
+        if sales:
+            await sales_repo.bulk_upsert_sales(sales)
+    except Exception:
+        logger.warning("iiko unavailable for daily plan-fact %s, using DB cache", date, exc_info=True)
+        sales = await sales_repo.get_sales_by_period(date, date)
+
+    actual_sales = [
+        {"date": date, "dish_id": s.dish_id, "dish_name": s.dish_name,
+         "quantity": s.quantity, "total": s.total}
+        for s in sales
+    ]
+    active_dish_names = await menu_repo.get_latest_active_dish_names()
+    records = await forecasts_repo.get_plan_fact(
+        date, date, actual_sales, method="ml_daily",
+        active_dish_names=active_dish_names,
+    )
+
+    # For daily analysis, only count dishes that were actually forecasted (predicted > 0)
+    forecasted = [r for r in records if r.predicted_quantity > 0]
+    deviations = [
+        abs(r.actual_quantity - r.predicted_quantity) / max(r.actual_quantity, r.predicted_quantity)
+        for r in forecasted
+        if r.actual_quantity > 0 or r.predicted_quantity > 0
+    ]
+    mape = (sum(deviations) / len(deviations) * 100) if deviations else 0.0
+    accuracy = max(0.0, 100.0 - mape)
+
+    total_predicted = sum(r.predicted_quantity for r in forecasted)
+    total_actual = sum(r.actual_quantity for r in forecasted)
+    total_predicted_revenue = sum(r.predicted_revenue for r in forecasted)
+    total_actual_revenue = sum(r.actual_revenue for r in forecasted)
+
+    summary = PlanFactSummary(
+        total_predicted=round(total_predicted, 1),
+        total_actual=round(total_actual, 1),
+        mape=round(mape, 1),
+        accuracy=round(accuracy, 1),
+        quality_rating=_quality_rating(mape),
+        dish_count=len(forecasted),
+        total_predicted_revenue=round(total_predicted_revenue, 0),
+        total_actual_revenue=round(total_actual_revenue, 0),
+    )
+
+    return PlanFactResponse(date=date, records=forecasted, summary=summary)
+
+
+@router.post("/ml/train-daily")
+async def train_daily_ml_models(
+    iiko_client: IikoClient = Depends(get_iiko_client),
+    weather_client: WeatherClient = Depends(get_weather_client),
+    sales_repo: SalesRepository = Depends(get_sales_repo),
+    products_repo: ProductsRepository = Depends(get_products_repo),
+    weather_repo: WeatherRepository = Depends(get_weather_repo),
+    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    ml_models_repo: MLModelsRepository = Depends(get_ml_models_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
     settings: Settings = Depends(get_settings),
 ):
     collector = DataCollector(
@@ -490,6 +629,41 @@ async def train_ml_models(
         sales_repo=sales_repo,
         weather_repo=weather_repo,
         settings=settings,
+        menu_repo=menu_repo,
+        products_repo=products_repo,
+    )
+    return await service.train_daily_models(force=True)
+
+
+@router.post("/ml/train")
+async def train_ml_models(
+    iiko_client: IikoClient = Depends(get_iiko_client),
+    weather_client: WeatherClient = Depends(get_weather_client),
+    sales_repo: SalesRepository = Depends(get_sales_repo),
+    products_repo: ProductsRepository = Depends(get_products_repo),
+    weather_repo: WeatherRepository = Depends(get_weather_repo),
+    forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
+    ml_models_repo: MLModelsRepository = Depends(get_ml_models_repo),
+    menu_repo: MenuSnapshotsRepository = Depends(get_menu_snapshots_repo),
+    settings: Settings = Depends(get_settings),
+):
+    collector = DataCollector(
+        iiko_client=iiko_client,
+        weather_client=weather_client,
+        sales_repo=sales_repo,
+        products_repo=products_repo,
+        weather_repo=weather_repo,
+        settings=settings,
+    )
+    service = MLForecastService(
+        data_collector=collector,
+        forecasts_repo=forecasts_repo,
+        ml_models_repo=ml_models_repo,
+        sales_repo=sales_repo,
+        weather_repo=weather_repo,
+        settings=settings,
+        menu_repo=menu_repo,
+        products_repo=products_repo,
     )
     result = await service.train_models(force=True)
     return result
@@ -522,6 +696,7 @@ async def sync_assembly_charts(
 @router.get("/inventory", response_model=InventoryResponse)
 async def get_inventory(
     date: datetime.date = Query(...),
+    scope: str = Query("week", pattern="^(day|week)$"),
     iiko_client: IikoClient = Depends(get_iiko_client),
     products_repo: ProductsRepository = Depends(get_products_repo),
     forecasts_repo: ForecastsRepository = Depends(get_forecasts_repo),
@@ -529,7 +704,7 @@ async def get_inventory(
 ) -> InventoryResponse | JSONResponse:
     try:
         service = InventoryService(iiko_client, forecasts_repo, products_repo, settings)
-        return await service.get_weekly_inventory(date)
+        return await service.get_inventory(date, scope=scope)  # type: ignore[arg-type]
     except ApiClientError as exc:
         logger.error("Inventory API error: %s", exc)
         return JSONResponse(status_code=502, content={"detail": str(exc)})

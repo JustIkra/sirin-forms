@@ -27,7 +27,6 @@ FEATURE_NAMES = [
     "trend_7d",        # 16 — slope of sales over last 7 days
     "days_since_last_sale",  # 17 — capped at 30
     "total_restaurant_sales_7d_avg",  # 18
-    # --- new features ---
     "lag_1d",          # 19 — sales yesterday
     "lag_7d",          # 20 — sales 7 days ago
     "lag_14d",         # 21 — sales 14 days ago
@@ -40,6 +39,13 @@ FEATURE_NAMES = [
     "weather_category",  # 28 (categorical) — 0=clear,1=clouds,2=rain,3=snow,4=other
     "temp_x_weekend",    # 29 — interaction: temp_avg * is_weekend
     "precip_x_weekend",  # 30 — interaction: precipitation * is_weekend
+    "lag_21d",          # 31 — sales 21 days ago (monthly cycle)
+    "lag_28d",          # 32 — sales 28 days ago (4-week cycle, same weekday)
+    "rolling_avg_14d",  # 33 — 2-week baseline
+    "rolling_avg_60d",  # 34 — 2-month baseline (stable long-term average)
+    "density_30d",      # 35 — share of non-zero days in last 30 (regularity signal)
+    "total_restaurant_sales_1d",  # 36 — yesterday's restaurant-wide sales (strong lead)
+    "same_weekday_max_4w",  # 37 — max of last 4 same-weekday sales (peak reference)
 ]
 
 # day_of_week, month, is_weekend, is_holiday, is_pre_holiday, is_day_off, is_payday_period, weather_category
@@ -127,12 +133,33 @@ def build_features_dataframe(
         lag_1d = qty_series.iloc[i - 1] if i >= 1 else np.nan
         lag_7d = qty_series.iloc[i - 7] if i >= 7 else np.nan
         lag_14d = qty_series.iloc[i - 14] if i >= 14 else np.nan
+        lag_21d = qty_series.iloc[i - 21] if i >= 21 else np.nan
+        lag_28d = qty_series.iloc[i - 28] if i >= 28 else np.nan
+
+        # Additional rolling windows
+        past_14 = qty_series.iloc[max(0, i - 14):i]
+        past_60 = qty_series.iloc[max(0, i - 60):i]
+
+        # Density: share of non-zero days in last 30d (regularity signal)
+        density_30d = (
+            float((past_30 > 0).mean()) if len(past_30) > 0 else np.nan
+        )
+
+        # Same-weekday maximum (peak reference — catches recent uptrends)
+        same_wd_max = float(np.max(same_wd_vals)) if same_wd_vals else np.nan
 
         # Volatility
         rolling_std = float(past_7.std()) if len(past_7) >= 2 else np.nan
         mean_30 = past_30.mean() if len(past_30) > 0 else np.nan
         std_30 = float(past_30.std()) if len(past_30) >= 2 else np.nan
         cv_30d = (std_30 / mean_30) if mean_30 and mean_30 > 0 and not np.isnan(std_30) else np.nan
+
+        # Yesterday's restaurant-wide total (strong same-phase demand signal)
+        total_1d = np.nan
+        if total_daily_sales:
+            prev = d - datetime.timedelta(days=1)
+            if prev in total_daily_sales:
+                total_1d = float(total_daily_sales[prev])
 
         # Cyclic seasonality
         doy = d.timetuple().tm_yday
@@ -179,6 +206,13 @@ def build_features_dataframe(
             "weather_category": w_cat,
             "temp_x_weekend": (temp * is_we) if not np.isnan(temp) else np.nan,
             "precip_x_weekend": (precip * is_we) if not np.isnan(precip) else np.nan,
+            "lag_21d": lag_21d,
+            "lag_28d": lag_28d,
+            "rolling_avg_14d": past_14.mean() if len(past_14) > 0 else np.nan,
+            "rolling_avg_60d": past_60.mean() if len(past_60) > 0 else np.nan,
+            "density_30d": density_30d,
+            "total_restaurant_sales_1d": total_1d,
+            "same_weekday_max_4w": same_wd_max,
             "target": qty_series.iloc[i],
         })
 
@@ -201,14 +235,20 @@ def build_prediction_features(
 
     # Rolling averages (past data only)
     recent_7 = []
+    recent_14 = []
     recent_30 = []
+    recent_60 = []
     same_wd = []
-    for offset in range(1, 31):
+    for offset in range(1, 61):
         d = target_date - datetime.timedelta(days=offset)
         qty = daily.get(d, 0.0)
         if offset <= 7:
             recent_7.append(qty)
-        recent_30.append(qty)
+        if offset <= 14:
+            recent_14.append(qty)
+        if offset <= 30:
+            recent_30.append(qty)
+        recent_60.append(qty)
         if d.weekday() == target_date.weekday() and offset <= 28:
             same_wd.append(qty)
 
@@ -226,14 +266,17 @@ def build_prediction_features(
             days_since = offset
             break
 
-    # Total restaurant sales 7d average
+    # Total restaurant sales 7d average + yesterday's total
     total_7d_avg = np.nan
+    total_1d = np.nan
     if total_daily_sales:
         total_vals = []
         for offset in range(1, 8):
             prev = target_date - datetime.timedelta(days=offset)
             if prev in total_daily_sales:
                 total_vals.append(total_daily_sales[prev])
+                if offset == 1:
+                    total_1d = float(total_daily_sales[prev])
         if total_vals:
             total_7d_avg = float(np.mean(total_vals))
 
@@ -241,6 +284,15 @@ def build_prediction_features(
     lag_1d = daily.get(target_date - datetime.timedelta(days=1), np.nan)
     lag_7d = daily.get(target_date - datetime.timedelta(days=7), np.nan)
     lag_14d = daily.get(target_date - datetime.timedelta(days=14), np.nan)
+    lag_21d = daily.get(target_date - datetime.timedelta(days=21), np.nan)
+    lag_28d = daily.get(target_date - datetime.timedelta(days=28), np.nan)
+
+    # Density of non-zero days in last 30
+    nonzero_30 = sum(1 for q in recent_30 if q > 0)
+    density_30d = (nonzero_30 / len(recent_30)) if recent_30 else np.nan
+
+    # Same-weekday maximum (last 4 weeks)
+    same_wd_max = float(np.max(same_wd)) if same_wd else np.nan
 
     # Volatility
     rolling_std = float(np.std(recent_7)) if len(recent_7) >= 2 else np.nan
@@ -293,6 +345,13 @@ def build_prediction_features(
         w_cat,
         (temp * is_we) if not np.isnan(temp) else np.nan,
         (precip * is_we) if not np.isnan(precip) else np.nan,
+        lag_21d,
+        lag_28d,
+        float(np.mean(recent_14)) if recent_14 else np.nan,
+        float(np.mean(recent_60)) if recent_60 else np.nan,
+        density_30d,
+        total_1d,
+        same_wd_max,
     ], dtype=np.float64).reshape(1, -1)
 
     return features

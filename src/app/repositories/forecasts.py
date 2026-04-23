@@ -5,7 +5,12 @@ from rapidfuzz import fuzz
 from sqlalchemy import delete, distinct, select
 
 from app.db import ForecastRecord
-from app.models.forecast import DailyForecastResult, DishForecast, PlanFactRecord
+from app.models.forecast import (
+    DailyForecastResult,
+    DishForecast,
+    DishIngredient,
+    PlanFactRecord,
+)
 from app.repositories.base import BaseRepository
 
 
@@ -23,6 +28,14 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         )
         records = []
         for dish in forecast.forecasts:
+            ingredients_json = (
+                json.dumps(
+                    [ing.model_dump() for ing in dish.ingredients],
+                    ensure_ascii=False,
+                )
+                if dish.ingredients
+                else None
+            )
             record = ForecastRecord(
                 date=forecast.date,
                 dish_id=dish.dish_id,
@@ -31,6 +44,7 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
                 confidence=dish.confidence,
                 price=dish.price,
                 key_factors=json.dumps(dish.key_factors, ensure_ascii=False) if dish.key_factors else None,
+                ingredients=ingredients_json,
                 weather=forecast.weather,
                 is_holiday=forecast.is_holiday,
                 notes=forecast.notes,
@@ -53,9 +67,18 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         if not rows:
             return None
 
-        return DailyForecastResult(
-            date=date,
-            forecasts=[
+        forecasts: list[DishForecast] = []
+        for r in rows:
+            if not (r.price and r.price > 0):
+                continue
+            ingredients: list[DishIngredient] = []
+            if r.ingredients:
+                try:
+                    raw = json.loads(r.ingredients)
+                    ingredients = [DishIngredient(**item) for item in raw]
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    ingredients = []
+            forecasts.append(
                 DishForecast(
                     dish_id=r.dish_id,
                     dish_name=r.dish_name,
@@ -63,15 +86,67 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
                     confidence=r.confidence,
                     key_factors=json.loads(r.key_factors) if r.key_factors else [],
                     price=r.price,
+                    prediction_method="ml" if method == "ml_daily" else "ml",
+                    ingredients=ingredients,
                 )
-                for r in rows
-                if r.price and r.price > 0
-            ],
+            )
+
+        total_revenue = round(
+            sum((f.price or 0.0) * f.predicted_quantity for f in forecasts), 0
+        )
+        # Восстанавливаем границы недели для method="ml" (weekly) — они не
+        # хранятся в БД, но выводятся детерминированно: понедельник недели
+        # даты forecast.date, + 6 дней.
+        week_start: datetime.date | None = None
+        week_end: datetime.date | None = None
+        if method == "ml":
+            week_start = date - datetime.timedelta(days=date.weekday())
+            week_end = week_start + datetime.timedelta(days=6)
+        return DailyForecastResult(
+            date=date,
+            forecasts=forecasts,
             weather=rows[0].weather,
             is_holiday=rows[0].is_holiday,
             notes=rows[0].notes,
             method=method,
+            ml_count=len(forecasts),
+            fallback_count=0,
+            total_revenue=total_revenue,
+            week_start=week_start,
+            week_end=week_end,
         )
+
+    async def delete_obsolete_forecasts(
+        self,
+        active_dish_ids: set[str],
+        *,
+        method: str | None = None,
+        date_from: datetime.date | None = None,
+    ) -> int:
+        """Delete forecast rows for dishes no longer in the active menu.
+
+        Called after a retrain to clear stale predictions left over when a
+        dish has been removed from the menu (its ml_model is deleted by
+        `_cleanup_obsolete_models`, but the forecast row keyed by
+        (date, method) for the matching week/day would otherwise linger
+        in the cache and be served via `get_forecast`).
+
+        Pass `method` to scope the cleanup to one granularity — weekly
+        retrain should not nuke daily forecasts and vice versa. Pass
+        `date_from` to preserve historical plan-fact rows (not normally
+        needed: plan-fact queries already filter by active_dish_ids).
+        """
+        if not active_dish_ids:
+            return 0
+        stmt = delete(ForecastRecord).where(
+            ForecastRecord.dish_id.notin_(active_dish_ids),
+        )
+        if method is not None:
+            stmt = stmt.where(ForecastRecord.method == method)
+        if date_from is not None:
+            stmt = stmt.where(ForecastRecord.date >= date_from)
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
 
     async def get_forecast_dates(
         self, date_from: datetime.date, date_to: datetime.date,
@@ -91,7 +166,18 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         date_to: datetime.date,
         actual_sales: list[dict],
         method: str = "ml",
+        active_dish_ids: set[str] | None = None,
+        active_dish_names: set[str] | None = None,
     ) -> list[PlanFactRecord]:
+        # Normalize name-based filter once: lower + strip. When provided, this
+        # filter takes priority over `active_dish_ids` — iiko often re-creates
+        # the same dish under a new UUID, so name is the stable identifier.
+        name_filter = (
+            {n.strip().lower() for n in active_dish_names if n and n.strip()}
+            if active_dish_names is not None
+            else None
+        )
+
         stmt = (
             select(ForecastRecord)
             .where(
@@ -136,6 +222,15 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
         matched_sales: set[tuple[datetime.date, str]] = set()  # (date, name_lower)
 
         for f in forecasts:
+            # Domain 3: restrict plan-fact to active dishes (Domain 1 scope).
+            # Name-based filter wins when provided (handles iiko duplicate IDs
+            # for the same dish — e.g. "Лимон 30 гр" under 3 different UUIDs).
+            f_name_norm = f.dish_name.strip().lower()
+            if name_filter is not None:
+                if f_name_norm not in name_filter:
+                    continue
+            elif active_dish_ids is not None and f.dish_id not in active_dish_ids:
+                continue
             # Prefer name-based match (aggregates across duplicate IDs),
             # fall back to ID-based match, then fuzzy match
             name_key = (f.date, f.dish_name.strip().lower())
@@ -196,6 +291,16 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
             name = (sale.get("dish_name") or "").strip().lower()
             if not name:
                 continue
+            # Domain 3: restrict unforecasted-sales rows to active dishes too.
+            # Same priority rule as above — name-filter wins over id-filter.
+            if name_filter is not None:
+                if name not in name_filter:
+                    continue
+            elif (
+                active_dish_ids is not None
+                and sale.get("dish_id") not in active_dish_ids
+            ):
+                continue
             key = (sale["date"], name)
             if key in matched_sales:
                 continue
@@ -214,7 +319,12 @@ class ForecastsRepository(BaseRepository[ForecastRecord]):
                 revenue_deviation_pct=-100.0,
             ))
 
-        return records
+        # Drop noise rows where the dish neither was forecasted nor sold
+        # (predicted=0 AND actual=0 → meaningless 0/0 that poisons MAPE).
+        return [
+            r for r in records
+            if not (r.predicted_quantity == 0 and r.actual_quantity == 0)
+        ]
 
     @staticmethod
     def _fuzzy_match_name(
