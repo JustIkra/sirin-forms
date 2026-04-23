@@ -125,7 +125,7 @@ export default function App() {
     <Layout activePage={page} onNavigate={setPage}>
       {page === 'forecast' && (
         <>
-          <div className="grid grid-cols-1 items-start gap-10 pt-6 lg:grid-cols-2 lg:gap-16">
+          <div className="grid grid-cols-1 items-stretch gap-10 pt-6 lg:grid-cols-2 lg:gap-16">
             <Hero
               eyebrow="ПРОГНОЗ СПРОСА ДЛЯ РЕСТОРАНА"
               title={

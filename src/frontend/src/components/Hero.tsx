@@ -21,7 +21,7 @@ export default function Hero({
 }: Props) {
   return (
     <section
-      className="flex h-full min-h-[520px] flex-col py-2"
+      className="flex h-full flex-col py-2"
       data-testid="hero"
     >
       <div className="flex flex-col gap-7">
