@@ -71,18 +71,28 @@ body {
   color: #101419;
 }
 
+/* Type scale — 7 steps, no random in-between sizes.
+ *   micro  11px  uppercase eyebrows / table headers
+ *   small  13px  chips, dense meta
+ *   body   14px  default body text
+ *   lead   16px  secondary heading inside cards
+ *   h3     18px  card / panel titles, big numeric values
+ *   h2     24px  section titles
+ *   hero   56→72 hero display only
+ */
+
 .eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #6b707a;
 }
 
 .eyebrow-light {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #9ba0aa;
 }
@@ -93,7 +103,7 @@ body {
   gap: 0.5rem;
   padding: 0.5rem 1.15rem;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   transition: all 0.18s ease;
   cursor: pointer;
@@ -124,9 +134,10 @@ body {
   background: var(--bg-accent);
   color: #ffffff;
   border-radius: 999px;
-  padding: 0.75rem 1.75rem;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 1.05rem 2.1rem;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   box-shadow: 0 8px 24px -8px rgba(41, 105, 243, 0.6);
   transition: transform 0.15s, box-shadow 0.15s;
   border: none;
