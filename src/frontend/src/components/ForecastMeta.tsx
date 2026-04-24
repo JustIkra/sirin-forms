@@ -86,14 +86,14 @@ export default function ForecastMeta({ result, summary }: Props) {
       </Cell>
 
       <Cell label="Погода">
-        <p className="text-[16px] leading-snug text-cream-100">
+        <p className="text-[18px] leading-snug text-cream-100">
           {result.weather ?? 'Нет данных'}
         </p>
       </Cell>
 
       <Cell label="Праздник">
         <p
-          className={`text-[18px] font-semibold leading-snug ${
+          className={`text-[20px] font-bold leading-snug ${
             result.is_holiday ? 'text-amber-300' : 'text-ink-400'
           }`}
         >
@@ -121,7 +121,7 @@ export default function ForecastMeta({ result, summary }: Props) {
               {formatRub(summary.total_actual_revenue)} ₽
             </span>
             <span
-              className={`text-[13px] font-medium tabular-nums ${revDevClass(revDev)}`}
+              className={`text-[13px] font-semibold tabular-nums ${revDevClass(revDev)}`}
             >
               {revDev > 0 ? '+' : ''}
               {revDev.toFixed(1)}% отклонение

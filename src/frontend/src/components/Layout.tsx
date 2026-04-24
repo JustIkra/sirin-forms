@@ -18,7 +18,7 @@ export default function Layout({ children, activePage, onNavigate }: Props) {
     <div className="min-h-screen bg-cream">
       <header className="mx-auto grid max-w-[1680px] grid-cols-1 items-center gap-10 px-8 pt-8 pb-6 lg:grid-cols-2 lg:gap-16 lg:px-12">
         <div className="flex items-baseline gap-3">
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink-900">Гурман</h1>
+          <h1 className="section-heading text-[24px] text-ink-900">Гурман</h1>
           <span className="eyebrow">Аналитикс</span>
         </div>
 
@@ -32,7 +32,7 @@ export default function Layout({ children, activePage, onNavigate }: Props) {
               data-testid={`nav-${item.id}`}
               onClick={() => onNavigate(item.id)}
               className={
-                'chip flex-1 justify-center !px-8 !py-3 !text-[15px] !font-medium ' +
+                'chip flex-1 justify-center !px-8 !py-3 ' +
                 (item.id === activePage ? 'chip-dark' : 'chip-light')
               }
             >

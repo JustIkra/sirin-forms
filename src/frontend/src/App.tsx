@@ -176,10 +176,10 @@ export default function App() {
               className="panel mt-10 px-8 py-8 lg:px-10 lg:py-10"
             >
               <div className="eyebrow-light mb-3">РАСКРЫТЫЙ ПРОГНОЗ</div>
-              <h3 className="mb-3 text-[26px] font-semibold leading-[1.15] text-cream-100">
+              <h3 className="section-heading mb-3 text-[28px] text-cream-100">
                 Прогноз по блюдам на выбранный период
               </h3>
-              <p className="mb-7 max-w-xl text-[15px] leading-[1.55] text-ink-400">
+              <p className="mb-7 max-w-xl text-[16px] leading-[1.55] text-ink-400">
                 После запуска система показывает позиции меню, ожидаемое количество
                 и факторы спроса, чтобы быстрее планировать закупки и работу кухни.
               </p>
