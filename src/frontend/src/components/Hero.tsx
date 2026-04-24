@@ -36,7 +36,7 @@ export default function Hero({
         </h2>
       </div>
 
-      <div className="mt-auto flex flex-col gap-7 pt-20">
+      <div className="mt-auto flex flex-col gap-7 pt-10">
         {paragraphs && paragraphs.length > 0 ? (
           <div className="flex max-w-xl flex-col gap-5 text-[20px] leading-[1.45] text-ink-600">
             {paragraphs.map((p, i) => (
