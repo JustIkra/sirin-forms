@@ -19,8 +19,14 @@
 
   --color-fact-red: #ff5a4b;
 
-  --font-display: "Manrope", "Inter", system-ui, sans-serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  /* Fonts follow Figma (Wareframe Сирин):
+   *   display → Inter (hero 82)
+   *   heading → Manrope (section 24/28/34)
+   *   body    → IBM Plex Sans (13/14/15/16/18/21/28)
+   */
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-heading: "Manrope", "Inter", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", "Inter", system-ui, -apple-system, sans-serif;
 
   --radius-panel: 35px;
   --radius-chip: 999px;
@@ -44,7 +50,9 @@ html, body, #root {
 
 body {
   margin: 0;
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
   background: var(--bg-cream);
   background-attachment: fixed;
   color: #1d2228;
@@ -64,35 +72,47 @@ body {
 }
 
 .hero-title {
-  font-family: "Manrope", "Inter", sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1;
   color: #101419;
 }
 
-/* Type scale — 7 steps, no random in-between sizes.
- *   micro  11px  uppercase eyebrows / table headers
- *   small  13px  chips, dense meta
- *   body   14px  default body text
- *   lead   16px  secondary heading inside cards
- *   h3     18px  card / panel titles, big numeric values
- *   h2     24px  section titles
- *   hero   56→72 hero display only
+.section-heading {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+/* Type scale — pulled from Figma (Wareframe Сирин).
+ * Fewer, deliberate sizes; every in-app text goes through one of these.
+ *   eyebrow 14  IBM Plex Sans 700, uppercase, tracking 0.14em
+ *   small   13  captions, dense meta
+ *   body    15  default dark-panel body
+ *   lead    18  secondary heading / panel body emphasized
+ *   value   20  big numeric values / info-card values
+ *   h3      24  card / panel titles (Manrope Bold)
+ *   h2      28  section titles (Manrope Bold)
+ *   h1      34  page headings (Manrope Bold)
+ *   hero    82  hero display (Inter Bold, LH 0.95)
  */
 
 .eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #6b707a;
+  color: #4d72d6;
 }
 
 .eyebrow-light {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #9ba0aa;
 }
@@ -101,10 +121,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1.15rem;
+  padding: 0.55rem 1.25rem;
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
   transition: all 0.18s ease;
   cursor: pointer;
 }
@@ -134,9 +155,10 @@ body {
   background: var(--bg-accent);
   color: #ffffff;
   border-radius: 999px;
-  padding: 1.05rem 2.1rem;
+  padding: 1.05rem 2.15rem;
+  font-family: var(--font-sans);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.01em;
   box-shadow: 0 8px 24px -8px rgba(41, 105, 243, 0.6);
   transition: transform 0.15s, box-shadow 0.15s;

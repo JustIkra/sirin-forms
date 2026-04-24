@@ -59,11 +59,11 @@ export default function ForecastForm({
       className="flex flex-col gap-5"
       data-testid="forecast-form"
     >
-      <header className="flex flex-col gap-2">
-        <h3 className="text-[22px] font-semibold leading-tight text-cream-100">
+      <header className="flex flex-col gap-2.5">
+        <h3 className="section-heading text-[24px] text-cream-100">
           {title}
         </h3>
-        <p className="max-w-md text-[13px] leading-relaxed text-ink-400">
+        <p className="max-w-md text-[15px] leading-[1.55] text-ink-400">
           {description}
         </p>
       </header>
@@ -86,7 +86,7 @@ export default function ForecastForm({
               onClick={() => onModeChange(m)}
               data-testid={`mode-${m}`}
               className={
-                'chip w-full justify-center !px-7 !py-2.5 !text-[14px] ' +
+                'chip w-full justify-center !px-6 !py-2.5 ' +
                 (mode === m
                   ? 'chip-accent'
                   : 'text-ink-400 hover:text-cream-100')
@@ -118,16 +118,16 @@ export default function ForecastForm({
 
       <label
         className={
-          'flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-black/25 px-5 py-3.5 ' +
+          'flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-black/25 px-5 py-4 ' +
           'transition-colors hover:bg-black/35 ' +
           'has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent-500/50'
         }
       >
-        <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-cream-100">
+        <span className="flex flex-col gap-1">
+          <span className="text-[15px] font-semibold text-cream-100">
             Пересчитать заново
           </span>
-          <span className="text-[11px] leading-relaxed text-ink-400">
+          <span className="text-[13px] leading-[1.5] text-ink-400">
             Игнорировать кэш и запустить расчёт с нуля
           </span>
         </span>
@@ -162,9 +162,9 @@ export default function ForecastForm({
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-black/25 px-4 py-3.5">
+    <div className="rounded-2xl bg-black/25 px-5 py-4">
       <div className="eyebrow-light mb-2">{label}</div>
-      <div className="text-[13px] text-cream-100">{value}</div>
+      <div className="text-[15px] leading-snug text-cream-100">{value}</div>
     </div>
   );
 }

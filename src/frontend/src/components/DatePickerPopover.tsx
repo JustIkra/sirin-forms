@@ -160,19 +160,19 @@ export default function DatePickerPopover({
     months: `${dp.months ?? ''}`,
     month: `${dp.month ?? ''} p-0`,
     month_caption: `${dp.month_caption ?? ''} flex h-9 items-center justify-center pb-3`,
-    caption_label: `${dp.caption_label ?? ''} text-[13px] font-semibold tracking-[0.02em] text-cream-100 capitalize`,
+    caption_label: `${dp.caption_label ?? ''} text-[15px] font-semibold tracking-[0.01em] text-cream-100 capitalize`,
     nav: `${dp.nav ?? ''} flex items-center gap-1`,
     button_previous: `${dp.button_previous ?? ''} inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-white/[0.06] hover:text-cream-100`,
     button_next: `${dp.button_next ?? ''} inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-white/[0.06] hover:text-cream-100`,
     chevron: `${dp.chevron ?? ''} fill-current`,
     month_grid: `${dp.month_grid ?? ''} w-full table-fixed border-separate border-spacing-0`,
     weekdays: `${dp.weekdays ?? ''}`,
-    weekday: `${dp.weekday ?? ''} h-8 text-center align-middle text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
-    week_number_header: `${dp.week_number_header ?? ''} h-8 text-center align-middle text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-500`,
-    week_number: `${dp.week_number ?? ''} h-9 text-center align-middle text-[10px] font-mono text-ink-500`,
+    weekday: `${dp.weekday ?? ''} h-9 text-center align-middle text-[13px] font-bold uppercase tracking-[0.12em] text-ink-500`,
+    week_number_header: `${dp.week_number_header ?? ''} h-9 text-center align-middle text-[13px] font-bold uppercase tracking-[0.12em] text-ink-500`,
+    week_number: `${dp.week_number ?? ''} h-10 text-center align-middle text-[13px] font-mono text-ink-500`,
     week: `${dp.week ?? ''}`,
-    day: `${dp.day ?? ''} h-9 p-0 text-center align-middle text-[13px] text-cream-100 tabular-nums`,
-    day_button: `${dp.day_button ?? ''} mx-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500`,
+    day: `${dp.day ?? ''} h-10 p-0 text-center align-middle text-[15px] text-cream-100 tabular-nums`,
+    day_button: `${dp.day_button ?? ''} mx-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500`,
     today: `${dp.today ?? ''} font-bold text-accent-500`,
     selected: `${dp.selected ?? ''} rdp-sirin-selected`,
     range_start: `${dp.range_start ?? ''} rdp-sirin-range-start`,
@@ -351,14 +351,14 @@ export default function DatePickerPopover({
         </span>
         <span className="flex flex-1 flex-col gap-0.5 leading-tight">
           <span
-            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400"
-            style={{ fontFamily: 'var(--font-display)' }}
+            className="text-[13px] font-bold uppercase tracking-[0.12em] text-ink-400"
+            style={{ fontFamily: 'var(--font-sans)' }}
           >
             {triggerEyebrow}
           </span>
           <span
             className="text-[16px] font-semibold tabular-nums text-cream-100"
-            style={{ fontFamily: 'var(--font-display)' }}
+            style={{ fontFamily: 'var(--font-sans)' }}
           >
             {triggerMain}
           </span>

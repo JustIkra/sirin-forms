@@ -24,27 +24,27 @@ export default function Hero({
       className="flex h-full flex-col py-2"
       data-testid="hero"
     >
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-8">
         <span
-          className="text-[12px] font-semibold uppercase tracking-[0.18em] text-accent-600"
+          className="text-[14px] font-bold uppercase tracking-[0.12em] text-accent-600"
           data-testid="hero-eyebrow"
         >
           {eyebrow}
         </span>
-        <h2 className="hero-title text-[64px] leading-[0.95] lg:text-[88px]">
+        <h2 className="hero-title text-[64px] leading-[0.95] lg:text-[82px]">
           {title}
         </h2>
       </div>
 
-      <div className="mt-auto flex flex-col gap-7 pt-10">
+      <div className="mt-auto flex flex-col gap-8 pt-10">
         {paragraphs && paragraphs.length > 0 ? (
-          <div className="flex max-w-xl flex-col gap-5 text-[20px] leading-[1.45] text-ink-600">
+          <div className="flex max-w-xl flex-col gap-4 text-[21px] leading-[1.45] text-ink-600">
             {paragraphs.map((p, i) => (
               <p key={i}>{p}</p>
             ))}
           </div>
         ) : description ? (
-          <p className="max-w-xl text-[20px] leading-[1.45] text-ink-600">
+          <p className="max-w-xl text-[21px] leading-[1.45] text-ink-600">
             {description}
           </p>
         ) : null}

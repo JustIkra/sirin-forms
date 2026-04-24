@@ -80,7 +80,7 @@ export default function ForecastMeta({ result, summary }: Props) {
       data-testid="forecast-meta"
     >
       <Cell label={result.week_start ? 'Неделя' : 'Дата'}>
-        <p className="text-[18px] font-semibold leading-snug tabular-nums text-cream-100">
+        <p className="text-[20px] font-bold leading-snug tabular-nums text-cream-100">
           {periodLabel}
         </p>
       </Cell>
@@ -104,7 +104,7 @@ export default function ForecastMeta({ result, summary }: Props) {
       {showForecastRevenue && (
         <Cell label="Выручка (прогноз)">
           <p
-            className="text-[18px] font-semibold leading-snug tabular-nums text-cream-100"
+            className="text-[20px] font-bold leading-snug tabular-nums text-cream-100"
             data-testid="forecast-meta-revenue"
           >
             {formatRub(Math.round(result.total_revenue))} ₽
@@ -114,7 +114,7 @@ export default function ForecastMeta({ result, summary }: Props) {
 
       {hasSummary && hasRevenue && (
         <Cell label="Выручка: план / факт">
-          <p className="flex flex-wrap items-baseline gap-x-2 text-[18px] font-semibold leading-snug tabular-nums text-cream-100">
+          <p className="flex flex-wrap items-baseline gap-x-2 text-[20px] font-bold leading-snug tabular-nums text-cream-100">
             <span>
               {formatRub(summary.total_predicted_revenue)}
               <span className="px-1 text-ink-500">/</span>
@@ -132,7 +132,7 @@ export default function ForecastMeta({ result, summary }: Props) {
 
       {hasSummary && (
         <Cell label="Кол-во: план / факт">
-          <p className="text-[18px] font-semibold leading-snug tabular-nums text-cream-100">
+          <p className="text-[20px] font-bold leading-snug tabular-nums text-cream-100">
             {summary.total_predicted}
             <span className="px-1 text-ink-500">/</span>
             {summary.total_actual}
