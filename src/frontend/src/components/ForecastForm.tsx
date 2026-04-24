@@ -56,7 +56,7 @@ export default function ForecastForm({
     <form
       id="forecast-form"
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-5"
       data-testid="forecast-form"
     >
       <header className="flex flex-col gap-2.5">
@@ -110,7 +110,7 @@ export default function ForecastForm({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <InfoCell label="Результат" value="Таблица по блюдам" />
         <InfoCell label="Формат" value="Количество / выручка" />
         <InfoCell label="Выход" value="Прогноз с факторами" />
