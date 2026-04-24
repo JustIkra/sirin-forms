@@ -56,7 +56,7 @@ export default function ForecastForm({
     <form
       id="forecast-form"
       onSubmit={handleSubmit}
-      className="flex flex-col gap-5"
+      className="flex flex-col gap-3"
       data-testid="forecast-form"
     >
       <header className="flex flex-col gap-2.5">
